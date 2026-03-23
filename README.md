@@ -26,15 +26,23 @@ The system autonomously experiments with different model architectures, hyperpar
 
 **The practical ceiling on this dataset appears to be AUROC ~0.70 with standard tabular ML. Scores above 0.75 would be noteworthy.**
 
-## Our Autoresearch Results
+## Our Autoresearch Results (32 experiments)
 
-See `results.tsv` for the full experiment log. Summary of best results:
+See `results.tsv` for the full experiment log. Summary of best kept results:
 
-| Experiment | AUROC | Model | Description |
-|---|---|---|---|
-| *baseline* | *TBD* | XGBoost | Initial baseline run |
+| AUROC | Model | Description |
+|---|---|---|
+| **0.6814** | sklearn GradientBoosting | n_est=2000, lr=0.01, depth=5 (best) |
+| 0.6809 | sklearn GradientBoosting | n_est=1000, lr=0.02 |
+| 0.6793 | sklearn GradientBoosting | n_est=500, lr=0.05 |
+| 0.6776 | 5-model ensemble | CB+LGB+XGB+GBM+ET optimized weights |
+| 0.6720 | 3-model ensemble | CB+LGB+XGB optimized weights |
+| 0.6719 | Stacking ensemble | CB+LGB+XGB with LR meta-learner |
+| 0.6718 | CatBoost | iter=1000, lr=0.05, auto balanced |
+| 0.6531 | LightGBM | n_est=1000, lr=0.05, depth=7 |
+| 0.6507 | XGBoost (baseline) | n_est=500, lr=0.1, depth=6 |
 
-*(Updated automatically by the autoresearch loop)*
+Models tried and discarded: CatBoost (deeper/varied), LightGBM (tuned), XGBoost (DART, deep tuning), HistGradientBoosting, AdaBoost, MLP neural network, SMOTE oversampling, feature engineering (interactions), feature selection, target encoding, rank-averaging ensembles, stacking, various class imbalance strategies.
 
 ## How It Works
 
@@ -42,7 +50,7 @@ Following the [autoresearch](https://github.com/karpathy/autoresearch) pattern:
 
 1. **`prepare.py`** (READ-ONLY): Downloads data, preprocesses features, defines evaluation (5-fold CV AUROC).
 2. **`train.py`** (MODIFIABLE): Model architecture, hyperparameters, training loop. This is the only file the autoresearch agent modifies.
-3. **`run_autoresearch.py`**: The autonomous experiment loop. Modifies `train.py`, runs experiments, logs results, keeps improvements, reverts failures.
+3. **`AUTORESEARCH_PROTOCOL.md`**: Instructions for the AI agent (Claude Code) to run the autonomous experiment loop.
 
 ### Experiment Loop
 
@@ -79,9 +87,9 @@ python prepare.py
 # 2. Run baseline
 python train.py
 
-# 3. Start autoresearch loop (runs autonomously for 5 hours)
+# 3. Start autoresearch loop (runs autonomously)
 # This is designed to be run by an AI agent (Claude Code)
-# See run_autoresearch.py for the experiment loop protocol
+# See AUTORESEARCH_PROTOCOL.md for the experiment loop instructions
 ```
 
 ## Viewing Results
