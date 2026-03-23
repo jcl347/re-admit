@@ -20,9 +20,9 @@ def train_and_predict(X_train, y_train, X_val):
     from sklearn.ensemble import GradientBoostingClassifier
 
     model = GradientBoostingClassifier(
-        n_estimators=1000,
+        n_estimators=2000,
         max_depth=5,
-        learning_rate=0.02,
+        learning_rate=0.01,
         subsample=0.8,
         min_samples_split=20,
         min_samples_leaf=10,
