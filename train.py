@@ -8,7 +8,7 @@ hyperparameter tuning, preprocessing, etc.
 The autoresearch loop will modify this file, run it, and evaluate results.
 If results improve (higher AUROC), the change is kept. Otherwise, reverted.
 
-Current model: XGBoost baseline
+Current model: LightGBM with tuned hyperparameters
 """
 
 import time
@@ -26,7 +26,7 @@ from prepare import (
 # ─── Model Configuration ─────────────────────────────────────────────────────
 # Modify anything below this line.
 
-MODEL_TYPE = "xgboost"  # Options: xgboost, lightgbm, catboost, sklearn_rf, sklearn_lr, ensemble
+MODEL_TYPE = "lightgbm"  # Options: xgboost, lightgbm, catboost, sklearn_rf, sklearn_lr, ensemble
 
 # XGBoost hyperparameters
 XGBOOST_PARAMS = {
@@ -74,12 +74,17 @@ def train_and_predict(X_train, y_train, X_val):
 
     elif MODEL_TYPE == "lightgbm":
         from lightgbm import LGBMClassifier
+        neg_count = (y_train == 0).sum()
+        pos_count = (y_train == 1).sum()
         model = LGBMClassifier(
-            n_estimators=500,
-            max_depth=6,
-            learning_rate=0.1,
+            n_estimators=1000,
+            max_depth=7,
+            learning_rate=0.05,
             subsample=0.8,
             colsample_bytree=0.8,
+            num_leaves=63,
+            min_child_samples=20,
+            scale_pos_weight=neg_count / pos_count,
             random_state=RANDOM_SEED,
             n_jobs=-1,
             verbose=-1,
