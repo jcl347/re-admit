@@ -1,0 +1,23 @@
+[project]
+name = "re-admit"
+version = "0.1.0"
+description = "Autoresearch framework for hospital readmission prediction"
+requires-python = ">=3.10"
+dependencies = [
+    "numpy",
+    "pandas",
+    "scikit-learn",
+    "xgboost",
+    "lightgbm",
+    "catboost",
+    "ucimlrepo",
+    "joblib",
+    "tabulate",
+]
+
+[project.optional-dependencies]
+notebook = [
+    "jupyter",
+    "matplotlib",
+    "plotly",
+]
