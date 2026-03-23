@@ -9,3 +9,4 @@ build/
 .eggs/
 *.ipynb_checkpoints/
 results.tsv
+catboost_info/
