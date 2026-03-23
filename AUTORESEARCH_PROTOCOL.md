@@ -32,7 +32,8 @@ Each experiment runs on CPU. The training script runs a fixed 5-fold CV evaluati
 
 **What you CAN do:**
 
-* Modify `train.py` — this is the **only file you edit**. Everything is fair game: model type, ensembling, hyperparameters, feature engineering, preprocessing, training loop, class imbalance handling, etc.
+* Modify `train.py` — this is the **only file you edit**. Everything is fair game: model type, ensembling, hyperparameters, feature engineering, preprocessing, training loop, class imbalance handling, random seed, etc.
+* Override the model random seed via `MODEL_SEED` in `train.py`. The CV folds are fixed by `RANDOM_SEED` in `prepare.py`, but you can set `MODEL_SEED` to any value in `train.py` to experiment with different model initialization seeds. This is useful for seed averaging (training the same model with multiple seeds and averaging predictions).
 
 **What you CANNOT do:**
 
@@ -121,7 +122,7 @@ LOOP FOREVER:
 
 The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate.
 
-**Timeout:** Each experiment should take a few minutes total. If a run exceeds 30 minutes, kill it and treat it as a failure (discard and revert).
+**Timeout:** Each experiment should take a few minutes total. If a run exceeds 1.5 hours, kill it and treat it as a failure (discard and revert).
 
 **Crashes:** If a run crashes (OOM, or a bug, etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the tsv, and move on.
 
@@ -152,6 +153,11 @@ The idea is that you are a completely autonomous researcher trying things out. I
 - Feature selection (remove low-importance features)
 - Binning continuous features
 - Target encoding for high-cardinality categoricals
+
+### Seed strategies
+- Override `MODEL_SEED` in `train.py` to use a different seed than `RANDOM_SEED`
+- Seed averaging: train the same model N times with different seeds, average predictions
+- Use different seeds per model in ensembles for diversity
 
 ### Class imbalance handling
 - SMOTE / ADASYN oversampling
