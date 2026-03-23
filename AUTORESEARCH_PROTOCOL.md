@@ -41,9 +41,9 @@ Each experiment runs on CPU. The training script runs a fixed 5-fold CV evaluati
 * Install new packages or add dependencies beyond what's in `pyproject.toml` (numpy, pandas, scikit-learn, xgboost, lightgbm, catboost, joblib, scipy, imbalanced-learn).
 * Modify the evaluation harness. The `evaluate_cv` function in `prepare.py` is the ground truth metric.
 
-**The goal is simple: get the highest AUROC.** Everything is fair game: change the model type, the ensembling strategy, the hyperparameters, the feature engineering, the class imbalance handling. The only constraint is that the code runs without crashing.
+**The goal is to reach AUROC 0.70.** Everything is fair game: change the model type, the ensembling strategy, the hyperparameters, the feature engineering, the class imbalance handling. The only constraint is that the code runs without crashing.
 
-**Simplicity criterion:** All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude.
+**No speed penalty:** Do NOT discard experiments just because they are slower. Training time is irrelevant — only AUROC matters. Keep any experiment that improves AUROC, regardless of how long it takes. The 1.5 hour timeout still applies to prevent infinite runs, but within that budget, slower methods are perfectly fine.
 
 **The first run:** Your very first run should always be to establish the baseline, so you will run the training script as is.
 
