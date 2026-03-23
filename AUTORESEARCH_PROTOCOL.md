@@ -1,110 +1,167 @@
-# Autoresearch Protocol for Readmission Prediction
+# autoresearch — readmission prediction
 
-This document defines the autonomous experiment loop for the readmission prediction task. It is designed to be executed by an AI agent (Claude Code).
+This is an experiment to have the LLM do its own research on hospital readmission prediction.
 
 ## Setup
 
-1. **Branch**: Work on `autoresearch/<tag>` branch (e.g., `autoresearch/mar23`)
-2. **Read files**: `README.md`, `prepare.py` (read-only), `train.py` (modifiable)
-3. **Verify data**: Run `python prepare.py` to download and cache data
-4. **Initialize**: Create `results.tsv` with header row
-5. **Baseline**: Run `python train.py > run.log 2>&1` to establish baseline
+To set up a new experiment, work with the user to:
 
-## Experiment Loop
+1. **Agree on a run tag**: propose a tag based on today's date (e.g. `mar23`). The branch `autoresearch/<tag>` must not already exist — this is a fresh run.
+2. **Create the branch**: `git checkout -b autoresearch/<tag>` from current main.
+3. **Read the in-scope files**: The repo is small. Read these files for full context:
+   * `README.md` — repository context, published baselines, dataset info.
+   * `prepare.py` — fixed constants, data prep, preprocessing, 5-fold CV evaluation. **Do not modify.**
+   * `train.py` — the file you modify. Model architecture, hyperparameters, training loop, ensembling.
+4. **Verify data exists**: Check that `~/.cache/re-admit/` contains `processed_data.npz` and `metadata.json`. If not, tell the human to run `python prepare.py`.
+5. **Initialize results.tsv**: Create `results.tsv` with just the header row. The baseline will be recorded after the first run.
+6. **Confirm and go**: Confirm setup looks good.
+
+Once you get confirmation, kick off the experimentation.
+
+## Dataset
+
+**UCI Diabetes 130-US Hospitals** (Strack et al., 2014)
+- 101,766 encounters, 42 features after preprocessing
+- Binary target: 30-day readmission (11.2% positive rate)
+- 5-fold stratified cross-validation with fixed seed
+- Primary metric: **AUROC** (area under ROC curve)
+
+## Experimentation
+
+Each experiment runs on CPU. The training script runs a fixed 5-fold CV evaluation. You launch it simply as: `python train.py`.
+
+**What you CAN do:**
+
+* Modify `train.py` — this is the **only file you edit**. Everything is fair game: model type, ensembling, hyperparameters, feature engineering, preprocessing, training loop, class imbalance handling, etc.
+
+**What you CANNOT do:**
+
+* Modify `prepare.py`. It is read-only. It contains the fixed evaluation, data loading, preprocessing, and training constants (CV folds, sequence of features, random seed, etc).
+* Install new packages or add dependencies beyond what's in `pyproject.toml` (numpy, pandas, scikit-learn, xgboost, lightgbm, catboost, joblib, scipy, imbalanced-learn).
+* Modify the evaluation harness. The `evaluate_cv` function in `prepare.py` is the ground truth metric.
+
+**The goal is simple: get the highest AUROC.** Everything is fair game: change the model type, the ensembling strategy, the hyperparameters, the feature engineering, the class imbalance handling. The only constraint is that the code runs without crashing.
+
+**Simplicity criterion:** All else being equal, simpler is better. A small improvement that adds ugly complexity is not worth it. Conversely, removing something and getting equal or better results is a great outcome — that's a simplification win. When evaluating whether to keep a change, weigh the complexity cost against the improvement magnitude.
+
+**The first run:** Your very first run should always be to establish the baseline, so you will run the training script as is.
+
+## Output format
+
+Once the script finishes it prints a summary like this:
 
 ```
-LOOP FOREVER (target: 5 hours, ~60 experiments at 5 min each):
-
-1. Look at git state and current best AUROC
-2. Modify train.py with an experimental idea
-3. git commit -m "experiment: <description>"
-4. Run: python train.py > run.log 2>&1
-5. Parse: grep "^auroc:" run.log
-6. If grep empty → crash. Run: tail -n 50 run.log for traceback
-7. Log results to results.tsv
-8. If AUROC improved → keep (advance branch)
-9. If AUROC worse → git reset --hard HEAD~1
+======================================================================
+EXPERIMENT RESULTS
+======================================================================
+auroc: 0.681373
+auroc_std: 0.005175
+auroc_pooled: 0.681200
+auprc: 0.228000
+f1: 0.036343
+accuracy: 0.888578
+precision: 0.560000
+recall: 0.018000
+training_seconds: 1662.3
+peak_memory_mb: 75.7
+num_params: 0
+======================================================================
 ```
 
-## What You CAN Modify (in train.py)
+You can extract the key metric from the log file:
 
-- **Model type**: XGBoost, LightGBM, CatBoost, RandomForest, LogisticRegression, GradientBoosting
-- **Ensembling**: Stacking, blending, voting, weighted averaging
-- **Hyperparameters**: learning_rate, max_depth, n_estimators, regularization, etc.
-- **Feature engineering**: Interactions, polynomial features, binning, PCA, feature selection
-- **Preprocessing**: Different scaling, encoding, imputation strategies
-- **Threshold tuning**: Optimize classification threshold for F1
-
-## What You CANNOT Modify
-
-- `prepare.py` — data loading, preprocessing, evaluation harness (5-fold CV)
-- Installed packages (only use what's in pyproject.toml)
-- The evaluation metric (AUROC is primary)
-- The random seed or fold structure
-
-## Key Metric
-
-**Primary**: `auroc` (mean 5-fold cross-validation AUROC)
-**Secondary**: `f1`, `accuracy`, `auprc`
-
-## Experiment Ideas (Priority Order)
-
-### Tier 1: Quick Wins
-1. Try LightGBM (often faster + better than XGBoost)
-2. Try CatBoost (handles categoricals natively)
-3. Tune XGBoost hyperparameters (max_depth, learning_rate, n_estimators)
-4. Adjust scale_pos_weight for class imbalance
-
-### Tier 2: Feature Engineering
-5. Create interaction features (age × num_medications, etc.)
-6. Bin continuous features (age groups, medication count buckets)
-7. Feature selection (remove low-importance features)
-8. Add polynomial features for top predictors
-
-### Tier 3: Ensembling
-9. Voting ensemble (XGBoost + LightGBM + CatBoost)
-10. Stacking with logistic regression meta-learner
-11. Blending with optimized weights
-12. Multi-layer stacking
-
-### Tier 4: Advanced
-13. Bayesian hyperparameter optimization
-14. Target encoding for high-cardinality categoricals
-15. SMOTE or other oversampling for class imbalance
-16. Custom loss functions for class imbalance
-
-### Tier 5: Architecture
-17. Neural network (MLP with sklearn)
-18. TabNet-style attention
-19. Gradient boosting + neural network ensemble
-
-## Output Format
-
-The training script prints parseable results:
 ```
-auroc: 0.670000
-auroc_std: 0.005000
-f1: 0.300000
-accuracy: 0.880000
-training_seconds: 45.2
-peak_memory_mb: 512.3
+grep "^auroc:" run.log
 ```
 
-## results.tsv Format
+## Logging results
 
-Tab-separated, 7 columns:
+When an experiment is done, log it to `results.tsv` (tab-separated, NOT comma-separated — commas break in descriptions).
+
+The TSV has a header row and 7 columns:
+
 ```
 commit	auroc	f1	accuracy	memory_mb	training_seconds	status	description
-a1b2c3d	0.670000	0.300000	0.880000	512.3	45.2	keep	baseline
 ```
 
-## Simplicity Criterion
+1. git commit hash (short, 7 chars)
+2. auroc achieved (e.g. 0.681373) — use 0.000000 for crashes
+3. f1 score — use 0.000000 for crashes
+4. accuracy — use 0.000000 for crashes
+5. peak memory in MB (e.g. 75.7) — use 0.0 for crashes
+6. training_seconds — use 0.0 for crashes
+7. status: `keep`, `discard`, or `crash`
+8. short text description of what this experiment tried
 
-All else being equal, simpler is better:
-- A 0.001 AUROC improvement with 20 lines of complexity? Probably not worth it.
-- A 0.001 AUROC improvement from deleting code? Definitely keep.
-- Equal AUROC but much simpler? Keep.
+Example:
 
-## NEVER STOP
+```
+commit	auroc	f1	accuracy	memory_mb	training_seconds	status	description
+274302f	0.650677	0.262961	0.732897	70.7	10.3	keep	baseline XGBoost
+bf74848	0.671775	0.278363	0.692068	71.1	42.5	keep	CatBoost balanced
+68b615c	0.681373	0.036343	0.888578	75.7	1662.3	keep	GBM n_est=2000 lr=0.01
+```
 
-Once the experiment loop begins, do NOT pause to ask the human. Run autonomously until manually stopped or the 5-hour budget is exhausted.
+## The experiment loop
+
+The experiment runs on a dedicated branch (e.g. `autoresearch/mar23`).
+
+```
+LOOP FOREVER:
+1. Look at the git state: the current branch/commit we're on
+2. Tune train.py with an experimental idea by directly hacking the code.
+3. git commit
+4. Run the experiment: python train.py > run.log 2>&1 (redirect everything — do NOT use tee or let output flood your context)
+5. Read out the results: grep "^auroc:\|^f1:\|^accuracy:" run.log
+6. If the grep output is empty, the run crashed. Run tail -n 50 run.log to read the Python stack trace and attempt a fix.
+7. Record the results in the tsv (NOTE: do not commit the results.tsv file, leave it untracked by git)
+8. If AUROC improved (higher), you "advance" the branch, keeping the git commit
+9. If AUROC is equal or worse, you git reset back to where you started
+```
+
+The idea is that you are a completely autonomous researcher trying things out. If they work, keep. If they don't, discard. And you're advancing the branch so that you can iterate.
+
+**Timeout:** Each experiment should take a few minutes total. If a run exceeds 30 minutes, kill it and treat it as a failure (discard and revert).
+
+**Crashes:** If a run crashes (OOM, or a bug, etc.), use your judgment: If it's something dumb and easy to fix (e.g. a typo, a missing import), fix it and re-run. If the idea itself is fundamentally broken, just skip it, log "crash" as the status in the tsv, and move on.
+
+**NEVER STOP:** Once the experiment loop has begun (after the initial setup), do NOT pause to ask the human if you should continue. Do NOT ask "should I keep going?" or "is this a good stopping point?". The human might be asleep, or gone from the computer and expects you to continue working indefinitely until you are manually stopped. You are autonomous. If you run out of ideas, think harder — try combining previous near-misses, try more radical architectural changes, try different ensembling strategies. The loop runs until the human interrupts you, period.
+
+## Experiment ideas (in rough priority order)
+
+### Model types
+- XGBoost, LightGBM, CatBoost (gradient boosting family)
+- sklearn GradientBoosting, HistGradientBoosting
+- RandomForest, ExtraTrees
+- LogisticRegression (with feature engineering)
+- MLP neural network (sklearn MLPClassifier)
+
+### Ensembling strategies
+- Weighted averaging of predictions from multiple models
+- Stacking with a meta-learner (LR on out-of-fold predictions)
+- Voting (hard/soft)
+- Blending with inner-CV optimized weights
+
+### Hyperparameter tuning
+- learning_rate, max_depth, n_estimators, regularization
+- subsample, colsample_bytree, min_child_weight
+- class imbalance: scale_pos_weight, sample_weight, auto_class_weights
+
+### Feature engineering
+- Interaction features (e.g., num_medications × time_in_hospital)
+- Feature selection (remove low-importance features)
+- Binning continuous features
+- Target encoding for high-cardinality categoricals
+
+### Class imbalance handling
+- SMOTE / ADASYN oversampling
+- Class weights (balanced)
+- Threshold optimization for F1
+- Cost-sensitive learning
+
+### Published baselines to beat
+| Model | AUROC | Source |
+|---|---|---|
+| CATBoost (tuned) | 0.700 | PMC 12085305 (2025) |
+| XGBoost | 0.667 | Liu et al., JMAI |
+| LACE Index | 0.660 | Clinical baseline |
