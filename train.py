@@ -1,20 +1,13 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-This file defines the model architecture, hyperparameters, and training loop.
-Everything is fair game: model type, ensembling, feature engineering,
-hyperparameter tuning, preprocessing, etc.
-
-The autoresearch loop will modify this file, run it, and evaluate results.
-If results improve (higher AUROC), the change is kept. Otherwise, reverted.
-
-Current model: CatBoost with tuned hyperparameters
+Current model: Stacking ensemble (CatBoost + LightGBM + XGBoost) with LR meta-learner
 """
 
 import time
-import os
 import tracemalloc
 import numpy as np
+from sklearn.model_selection import cross_val_predict, StratifiedKFold
 from prepare import (
     preprocess_data,
     evaluate_cv,
@@ -23,136 +16,81 @@ from prepare import (
     RANDOM_SEED,
 )
 
-# ─── Model Configuration ─────────────────────────────────────────────────────
-# Modify anything below this line.
-
-MODEL_TYPE = "catboost"  # Options: xgboost, lightgbm, catboost, sklearn_rf, sklearn_lr, ensemble
-
-# XGBoost hyperparameters
-XGBOOST_PARAMS = {
-    "n_estimators": 500,
-    "max_depth": 6,
-    "learning_rate": 0.1,
-    "subsample": 0.8,
-    "colsample_bytree": 0.8,
-    "min_child_weight": 1,
-    "gamma": 0,
-    "reg_alpha": 0,
-    "reg_lambda": 1,
-    "scale_pos_weight": 1,  # will be auto-set based on class imbalance
-    "random_state": RANDOM_SEED,
-    "eval_metric": "auc",
-    "tree_method": "hist",
-    "n_jobs": -1,
-}
-
-
-# ─── Training Function ───────────────────────────────────────────────────────
 
 def train_and_predict(X_train, y_train, X_val):
-    """
-    Train a model and return predictions on the validation set.
+    from catboost import CatBoostClassifier
+    from lightgbm import LGBMClassifier
+    from xgboost import XGBClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.preprocessing import StandardScaler
 
-    Args:
-        X_train: training features (n_train, n_features)
-        y_train: training labels (n_train,)
-        X_val: validation features (n_val, n_features)
+    neg_count = (y_train == 0).sum()
+    pos_count = (y_train == 1).sum()
+    spw = neg_count / pos_count
 
-    Returns:
-        y_pred_proba: predicted probabilities for class 1 (n_val,)
-    """
-    if MODEL_TYPE == "xgboost":
-        from xgboost import XGBClassifier
-        params = XGBOOST_PARAMS.copy()
-        # Auto-set scale_pos_weight for class imbalance
-        neg_count = (y_train == 0).sum()
-        pos_count = (y_train == 1).sum()
-        params["scale_pos_weight"] = neg_count / pos_count
-        model = XGBClassifier(**params)
-        model.fit(X_train, y_train, verbose=False)
-        y_pred_proba = model.predict_proba(X_val)[:, 1]
-
-    elif MODEL_TYPE == "lightgbm":
-        from lightgbm import LGBMClassifier
-        neg_count = (y_train == 0).sum()
-        pos_count = (y_train == 1).sum()
-        model = LGBMClassifier(
-            n_estimators=1000,
-            max_depth=7,
-            learning_rate=0.05,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            num_leaves=63,
-            min_child_samples=20,
-            scale_pos_weight=neg_count / pos_count,
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-            verbose=-1,
-        )
-        model.fit(X_train, y_train)
-        y_pred_proba = model.predict_proba(X_val)[:, 1]
-
-    elif MODEL_TYPE == "catboost":
-        from catboost import CatBoostClassifier
-        neg_count = (y_train == 0).sum()
-        pos_count = (y_train == 1).sum()
-        model = CatBoostClassifier(
-            iterations=1000,
-            depth=6,
-            learning_rate=0.05,
-            l2_leaf_reg=3,
-            border_count=128,
+    # Base models
+    models = [
+        ("cb", CatBoostClassifier(
+            iterations=1000, depth=6, learning_rate=0.05,
+            l2_leaf_reg=3, border_count=128,
             auto_class_weights="Balanced",
-            random_seed=RANDOM_SEED,
-            verbose=0,
-            thread_count=-1,
-        )
-        model.fit(X_train, y_train)
-        y_pred_proba = model.predict_proba(X_val)[:, 1]
+            random_seed=RANDOM_SEED, verbose=0, thread_count=-1,
+        )),
+        ("lgb", LGBMClassifier(
+            n_estimators=1000, max_depth=7, learning_rate=0.05,
+            subsample=0.8, colsample_bytree=0.8, num_leaves=63,
+            min_child_samples=20, scale_pos_weight=spw,
+            random_state=RANDOM_SEED, n_jobs=-1, verbose=-1,
+        )),
+        ("xgb", XGBClassifier(
+            n_estimators=500, max_depth=6, learning_rate=0.1,
+            subsample=0.8, colsample_bytree=0.8,
+            scale_pos_weight=spw, random_state=RANDOM_SEED,
+            eval_metric="auc", tree_method="hist", n_jobs=-1,
+        )),
+    ]
 
-    elif MODEL_TYPE == "sklearn_rf":
-        from sklearn.ensemble import RandomForestClassifier
-        model = RandomForestClassifier(
-            n_estimators=500,
-            max_depth=10,
-            random_state=RANDOM_SEED,
-            n_jobs=-1,
-        )
-        model.fit(X_train, y_train)
-        y_pred_proba = model.predict_proba(X_val)[:, 1]
+    # Level 1: Generate out-of-fold predictions for stacking
+    inner_cv = StratifiedKFold(n_splits=3, shuffle=True, random_state=RANDOM_SEED)
+    meta_train = np.zeros((len(X_train), len(models)))
+    meta_val = np.zeros((len(X_val), len(models)))
 
-    elif MODEL_TYPE == "sklearn_lr":
-        from sklearn.linear_model import LogisticRegression
-        from sklearn.preprocessing import StandardScaler
-        scaler = StandardScaler()
-        X_train_s = scaler.fit_transform(X_train)
-        X_val_s = scaler.transform(X_val)
-        model = LogisticRegression(
-            max_iter=1000,
-            random_state=RANDOM_SEED,
-            C=1.0,
-        )
-        model.fit(X_train_s, y_train)
-        y_pred_proba = model.predict_proba(X_val_s)[:, 1]
+    for i, (name, model) in enumerate(models):
+        # Out-of-fold predictions on training set
+        oof_preds = cross_val_predict(
+            model, X_train, y_train, cv=inner_cv,
+            method="predict_proba", n_jobs=1
+        )[:, 1]
+        meta_train[:, i] = oof_preds
 
-    else:
-        raise ValueError(f"Unknown MODEL_TYPE: {MODEL_TYPE}")
+        # Refit on full training set for val predictions
+        if name == "xgb":
+            model.fit(X_train, y_train, verbose=False)
+        else:
+            model.fit(X_train, y_train)
+        meta_val[:, i] = model.predict_proba(X_val)[:, 1]
+
+    # Level 2: Meta-learner (logistic regression on stacked predictions)
+    scaler = StandardScaler()
+    meta_train_s = scaler.fit_transform(meta_train)
+    meta_val_s = scaler.transform(meta_val)
+
+    meta_model = LogisticRegression(
+        random_state=RANDOM_SEED, C=1.0, max_iter=1000
+    )
+    meta_model.fit(meta_train_s, y_train)
+    y_pred_proba = meta_model.predict_proba(meta_val_s)[:, 1]
 
     return y_pred_proba
 
-
-# ─── Main ─────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     print(f"[train] Loading data...")
     X, y, feature_names, fold_indices = preprocess_data()
 
-    print(f"[train] Model: {MODEL_TYPE}")
+    print(f"[train] Model: Stacking (CB+LGB+XGB -> LR)")
     print(f"[train] Features: {X.shape[1]}, Samples: {X.shape[0]}")
-    print(f"[train] Time budget: {TIME_BUDGET_SECONDS}s")
-    print(f"[train] Running {len(fold_indices)}-fold cross-validation...")
 
-    # Track time and memory
     tracemalloc.start()
     start_time = time.time()
 
@@ -163,5 +101,4 @@ if __name__ == "__main__":
     tracemalloc.stop()
     peak_mb = peak / (1024 * 1024)
 
-    # Print parseable results
     print_results(results, elapsed, peak_mb)
