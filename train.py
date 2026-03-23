@@ -21,7 +21,7 @@ def train_and_predict(X_train, y_train, X_val):
 
     model = GradientBoostingClassifier(
         n_estimators=2000,
-        max_depth=5,
+        max_depth=6,
         learning_rate=0.01,
         subsample=0.8,
         min_samples_split=20,
