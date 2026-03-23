@@ -8,7 +8,7 @@ hyperparameter tuning, preprocessing, etc.
 The autoresearch loop will modify this file, run it, and evaluate results.
 If results improve (higher AUROC), the change is kept. Otherwise, reverted.
 
-Current model: LightGBM with tuned hyperparameters
+Current model: CatBoost with tuned hyperparameters
 """
 
 import time
@@ -26,7 +26,7 @@ from prepare import (
 # ─── Model Configuration ─────────────────────────────────────────────────────
 # Modify anything below this line.
 
-MODEL_TYPE = "lightgbm"  # Options: xgboost, lightgbm, catboost, sklearn_rf, sklearn_lr, ensemble
+MODEL_TYPE = "catboost"  # Options: xgboost, lightgbm, catboost, sklearn_rf, sklearn_lr, ensemble
 
 # XGBoost hyperparameters
 XGBOOST_PARAMS = {
@@ -94,10 +94,15 @@ def train_and_predict(X_train, y_train, X_val):
 
     elif MODEL_TYPE == "catboost":
         from catboost import CatBoostClassifier
+        neg_count = (y_train == 0).sum()
+        pos_count = (y_train == 1).sum()
         model = CatBoostClassifier(
-            iterations=500,
+            iterations=1000,
             depth=6,
-            learning_rate=0.1,
+            learning_rate=0.05,
+            l2_leaf_reg=3,
+            border_count=128,
+            auto_class_weights="Balanced",
             random_seed=RANDOM_SEED,
             verbose=0,
             thread_count=-1,
