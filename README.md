@@ -31,13 +31,14 @@ The system autonomously experiments with different model architectures, hyperpar
 
 Strack et al. (2014) grouped ICD-9 diagnosis codes (diag_1, diag_2, diag_3) into 9 disease categories, reducing ~700+ unique codes to: **Circulatory** (390–459, 785), **Respiratory** (460–519, 786), **Digestive** (520–579, 787), **Diabetes** (250.xx), **Injury** (800–999), **Musculoskeletal** (710–739), **Genitourinary** (580–629, 788), **Neoplasms** (140–239), and **Other**. This grouping is standard preprocessing for this dataset and is used by most published studies achieving AUROC ≥ 0.70.
 
-## Our Autoresearch Results (32 experiments)
+## Our Autoresearch Results (54 experiments)
 
 See `results.tsv` for the full experiment log. Summary of best kept results:
 
 | AUROC | Model | Description |
 |---|---|---|
-| **0.6814** | sklearn GradientBoosting | n_est=2000, lr=0.01, depth=5 (best) |
+| **0.6818** | sklearn GBM + ICD-9 features | n_est=2000, lr=0.01, depth=5 + Strack disease groups + is_dead flag (best) |
+| 0.6814 | sklearn GradientBoosting | n_est=2000, lr=0.01, depth=5 |
 | 0.6809 | sklearn GradientBoosting | n_est=1000, lr=0.02 |
 | 0.6793 | sklearn GradientBoosting | n_est=500, lr=0.05 |
 | 0.6776 | 5-model ensemble | CB+LGB+XGB+GBM+ET optimized weights |
