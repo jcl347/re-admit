@@ -17,7 +17,8 @@ The system autonomously experiments with different model architectures, hyperpar
 
 | Model | AUROC | Source |
 |---|---|---|
-| CATBoost (tuned) | 0.700 | PMC 12085305 (2025) |
+| CATBoost (tuned) | 0.700 | Emi-Johnson & Nkrumah (2025), Cureus |
+| XGBoost | 0.667 | Emi-Johnson & Nkrumah (2025), Cureus |
 | XGBoost | 0.667 | Liu et al., JMAI |
 | Logistic Regression | 0.642 | Liu et al., JMAI |
 | Random Forest | 0.630 | Liu et al., JMAI |
@@ -25,6 +26,10 @@ The system autonomously experiments with different model architectures, hyperpar
 | LACE Index (clinical baseline) | ~0.660 | Various |
 
 **The practical ceiling on this dataset appears to be AUROC ~0.70 with standard tabular ML. Scores above 0.75 would be noteworthy.**
+
+### Key Insight from Published Work
+
+Strack et al. (2014) grouped ICD-9 diagnosis codes (diag_1, diag_2, diag_3) into 9 disease categories, reducing ~700+ unique codes to: **Circulatory** (390–459, 785), **Respiratory** (460–519, 786), **Digestive** (520–579, 787), **Diabetes** (250.xx), **Injury** (800–999), **Musculoskeletal** (710–739), **Genitourinary** (580–629, 788), **Neoplasms** (140–239), and **Other**. This grouping is standard preprocessing for this dataset and is used by most published studies achieving AUROC ≥ 0.70.
 
 ## Our Autoresearch Results (32 experiments)
 
@@ -101,6 +106,7 @@ Open `autoresearch_results.ipynb` in Google Colab or Jupyter to see:
 
 ## References
 
-- Strack, B. et al. (2014). "Impact of HbA1c Measurement on Hospital Readmission Rates." *BioMed Research International*, 781670.
-- Liu et al. "Comparison of ML models for diabetes readmission." *JMAI*.
+- Strack, B., DeShazo, J. P., Gennings, C., Olmo, J. L., Ventura, S., Cios, K. J., & Clore, J. N. (2014). "Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records." *BioMed Research International*, 2014, 781670. DOI: [10.1155/2014/781670](https://doi.org/10.1155/2014/781670)
+- Emi-Johnson, O. G. & Nkrumah, K. J. (2025). "Predicting 30-Day Hospital Readmission in Patients With Diabetes Using Machine Learning on Electronic Health Record Data." *Cureus*, 17(4), e82437. DOI: [10.7759/cureus.82437](https://doi.org/10.7759/cureus.82437). PMC: [PMC12085305](https://pmc.ncbi.nlm.nih.gov/articles/PMC12085305/)
+- Liu et al. "Comparison of ML models for predicting 30-day readmission rates for patients with diabetes." *Journal of Medical Artificial Intelligence*. [Link](https://jmai.amegroups.org/article/view/9179/html)
 - Karpathy, A. (2025). "autoresearch" — https://github.com/karpathy/autoresearch
