@@ -1,8 +1,9 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Current model: GBM with ICD-9 disease groups ADDED as extra features (not replacing).
-Also adds is_dead flag from discharge_disposition_id.
+Current model: CatBoost with proper categorical feature handling via pandas DataFrame.
+CatBoost's native ordered target encoding is its key advantage over GBM.
+Also includes ICD-9 disease groups + is_dead features.
 """
 
 import time
@@ -21,12 +22,6 @@ from prepare import (
 from sklearn.metrics import roc_auc_score
 
 MODEL_SEED = RANDOM_SEED
-
-# Feature indices
-IDX_DIAG1 = 13
-IDX_DIAG2 = 14
-IDX_DIAG3 = 15
-IDX_DISCHARGE = 4
 
 
 def icd9_to_group(code_str):
@@ -60,79 +55,96 @@ def icd9_to_group(code_str):
         return 8  # Other
 
 
-# Pre-compute extra features once
-_extra_features = None
+def build_dataframe(X, feature_names):
+    """Build a pandas DataFrame with proper dtypes for CatBoost."""
+    df = pd.DataFrame(X, columns=feature_names)
 
-def get_extra_features():
-    """Load raw CSV and compute ICD-9 disease groups + is_dead flag."""
-    global _extra_features
-    if _extra_features is not None:
-        return _extra_features
-
+    # Load raw data for ICD-9 grouping and discharge info
     raw_path = Path.home() / '.cache/re-admit/diabetic_data.csv'
-    df = pd.read_csv(raw_path, usecols=['diag_1', 'diag_2', 'diag_3', 'discharge_disposition_id'])
+    raw = pd.read_csv(raw_path, usecols=['diag_1', 'diag_2', 'diag_3', 'discharge_disposition_id'])
 
-    g1 = df['diag_1'].apply(icd9_to_group).values.astype(np.float64)
-    g2 = df['diag_2'].apply(icd9_to_group).values.astype(np.float64)
-    g3 = df['diag_3'].apply(icd9_to_group).values.astype(np.float64)
+    # Add ICD-9 disease group features
+    df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
+    df['diag_group_2'] = raw['diag_2'].apply(icd9_to_group).astype(int).astype(str)
+    df['diag_group_3'] = raw['diag_3'].apply(icd9_to_group).astype(int).astype(str)
 
-    # Flag: patient died or went to hospice (can't be readmitted)
-    # discharge_disposition_id: 11=Expired, 13=Hospice/home, 14=Hospice/medical,
-    # 19=Expired at home, 20=Expired in medical facility, 21=Expired place unknown
+    # Dead/hospice flag
     dead_codes = {11, 13, 14, 19, 20, 21}
-    is_dead = df['discharge_disposition_id'].isin(dead_codes).astype(np.float64).values
+    df['is_dead'] = raw['discharge_disposition_id'].isin(dead_codes).astype(int).astype(str)
 
-    # Primary diagnosis is diabetes flag
-    is_diab_primary = (g1 == 0).astype(np.float64)
+    # Diabetes flags
+    df['is_diab_primary'] = (df['diag_group_1'] == '0').astype(int).astype(str)
+    df['n_diab_diag'] = (
+        (df['diag_group_1'] == '0').astype(int) +
+        (df['diag_group_2'] == '0').astype(int) +
+        (df['diag_group_3'] == '0').astype(int)
+    ).astype(str)
 
-    # Number of diabetes-related diagnoses (0-3)
-    n_diab = ((g1 == 0).astype(int) + (g2 == 0).astype(int) + (g3 == 0).astype(int)).astype(np.float64)
+    # Convert label-encoded categoricals to string for CatBoost
+    cat_cols_original = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
+                         'admission_source_id', 'diag_1', 'diag_2', 'diag_3',
+                         'max_glu_serum', 'A1Cresult',
+                         'metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
+                         'glimepiride', 'acetohexamide', 'glipizide', 'glyburide',
+                         'tolbutamide', 'pioglitazone', 'rosiglitazone', 'acarbose',
+                         'miglitol', 'troglitazone', 'tolazamide', 'insulin',
+                         'glyburide-metformin', 'glipizide-metformin',
+                         'glimepiride-pioglitazone', 'metformin-rosiglitazone',
+                         'metformin-pioglitazone', 'change', 'diabetesMed']
+    for col in cat_cols_original:
+        if col in df.columns:
+            df[col] = df[col].astype(int).astype(str)
 
-    _extra_features = np.column_stack([g1, g2, g3, is_dead, is_diab_primary, n_diab])
-    return _extra_features
+    # Added categorical features
+    added_cat = ['diag_group_1', 'diag_group_2', 'diag_group_3',
+                 'is_dead', 'is_diab_primary', 'n_diab_diag']
+
+    all_cat = [c for c in cat_cols_original if c in df.columns] + added_cat
+
+    return df, all_cat
 
 
 if __name__ == "__main__":
     print(f"[train] Loading data...")
     X, y, feature_names, fold_indices = preprocess_data()
 
-    print(f"[train] Loading ICD-9 disease groups + extra features...")
-    extra = get_extra_features()
+    print(f"[train] Building DataFrame with proper categorical types...")
+    df, cat_features = build_dataframe(X, feature_names)
 
-    # Augment X with extra features
-    X_aug = np.hstack([X, extra])
-
-    print(f"[train] Model: GBM + ICD-9 groups + is_dead + diabetes flags")
-    print(f"[train] Features: {X_aug.shape[1]} ({X.shape[1]} base + {extra.shape[1]} new)")
-    print(f"[train] Samples: {X_aug.shape[0]}")
+    print(f"[train] Model: CatBoost with native categorical handling")
+    print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
+    print(f"[train] Samples: {df.shape[0]}")
 
     tracemalloc.start()
     start_time = time.time()
 
-    # Custom CV loop using augmented features
     all_metrics = []
     all_y_true = []
     all_y_proba = []
 
     for fold_i, (train_idx, val_idx) in enumerate(fold_indices):
-        from sklearn.ensemble import GradientBoostingClassifier
+        from catboost import CatBoostClassifier, Pool
 
-        X_train = X_aug[train_idx]
-        X_val = X_aug[val_idx]
+        df_train = df.iloc[train_idx]
+        df_val = df.iloc[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
 
-        model = GradientBoostingClassifier(
-            n_estimators=2000,
-            max_depth=5,
-            learning_rate=0.01,
-            subsample=0.8,
-            min_samples_split=20,
-            min_samples_leaf=10,
-            max_features=0.8,
-            random_state=MODEL_SEED,
+        train_pool = Pool(df_train, label=y_train, cat_features=cat_features)
+        val_pool = Pool(df_val, cat_features=cat_features)
+
+        model = CatBoostClassifier(
+            iterations=3000,
+            depth=6,
+            learning_rate=0.03,
+            rsm=0.8,
+            l2_leaf_reg=3,
+            random_seed=MODEL_SEED,
+            verbose=0,
+            eval_metric='AUC',
+            task_type='CPU',
         )
-        model.fit(X_train, y_train)
-        y_pred_proba = model.predict_proba(X_val)[:, 1]
+        model.fit(train_pool)
+        y_pred_proba = model.predict_proba(val_pool)[:, 1]
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
