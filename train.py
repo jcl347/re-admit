@@ -1,9 +1,11 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Current model: CatBoost with proper categorical feature handling via pandas DataFrame.
-CatBoost's native ordered target encoding is its key advantage over GBM.
-Also includes ICD-9 disease groups + is_dead features.
+Experiment 57: CatBoost with smarter feature engineering:
+- Remove high-cardinality diag_1/2/3 from categoricals (keep numeric)
+- Add medical_specialty from raw data
+- Add interaction features (number_inpatient * num_medications, etc.)
+- Keep ICD-9 disease groups + is_dead + diabetes flags
 """
 
 import time
@@ -59,9 +61,12 @@ def build_dataframe(X, feature_names):
     """Build a pandas DataFrame with proper dtypes for CatBoost."""
     df = pd.DataFrame(X, columns=feature_names)
 
-    # Load raw data for ICD-9 grouping and discharge info
+    # Load raw data
     raw_path = Path.home() / '.cache/re-admit/diabetic_data.csv'
-    raw = pd.read_csv(raw_path, usecols=['diag_1', 'diag_2', 'diag_3', 'discharge_disposition_id'])
+    raw = pd.read_csv(raw_path, usecols=[
+        'diag_1', 'diag_2', 'diag_3', 'discharge_disposition_id',
+        'medical_specialty'
+    ])
 
     # Add ICD-9 disease group features
     df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
@@ -80,9 +85,33 @@ def build_dataframe(X, feature_names):
         (df['diag_group_3'] == '0').astype(int)
     ).astype(str)
 
-    # Convert label-encoded categoricals to string for CatBoost
-    cat_cols_original = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
-                         'admission_source_id', 'diag_1', 'diag_2', 'diag_3',
+    # Medical specialty (categorical) — label encode
+    from sklearn.preprocessing import LabelEncoder
+    le = LabelEncoder()
+    df['medical_specialty'] = le.fit_transform(raw['medical_specialty'].fillna('?').astype(str))
+    df['medical_specialty'] = df['medical_specialty'].astype(int).astype(str)
+
+    # Interaction features (numeric)
+    df['inpatient_x_meds'] = df['number_inpatient'] * df['num_medications']
+    df['inpatient_x_time'] = df['number_inpatient'] * df['time_in_hospital']
+    df['meds_x_time'] = df['num_medications'] * df['time_in_hospital']
+    df['emergency_x_inpatient'] = df['number_emergency'] * df['number_inpatient']
+    df['num_total_visits'] = df['number_outpatient'] + df['number_emergency'] + df['number_inpatient']
+
+    # Count medication changes (how many meds are not "No"/0)
+    med_cols = ['metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
+                'glimepiride', 'acetohexamide', 'glipizide', 'glyburide',
+                'tolbutamide', 'pioglitazone', 'rosiglitazone', 'acarbose',
+                'miglitol', 'troglitazone', 'tolazamide', 'insulin',
+                'glyburide-metformin', 'glipizide-metformin',
+                'glimepiride-pioglitazone', 'metformin-rosiglitazone',
+                'metformin-pioglitazone']
+    # In label encoding, 0 typically = "No" (most common). Count non-zero = active meds
+    df['n_active_meds'] = sum((df[col] != 0).astype(int) for col in med_cols if col in df.columns)
+
+    # Low-cardinality categoricals only (exclude diag_1/2/3 which have 700+ values)
+    cat_cols_low_card = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
+                         'admission_source_id',
                          'max_glu_serum', 'A1Cresult',
                          'metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
                          'glimepiride', 'acetohexamide', 'glipizide', 'glyburide',
@@ -91,15 +120,15 @@ def build_dataframe(X, feature_names):
                          'glyburide-metformin', 'glipizide-metformin',
                          'glimepiride-pioglitazone', 'metformin-rosiglitazone',
                          'metformin-pioglitazone', 'change', 'diabetesMed']
-    for col in cat_cols_original:
+    for col in cat_cols_low_card:
         if col in df.columns:
             df[col] = df[col].astype(int).astype(str)
 
     # Added categorical features
     added_cat = ['diag_group_1', 'diag_group_2', 'diag_group_3',
-                 'is_dead', 'is_diab_primary', 'n_diab_diag']
+                 'is_dead', 'is_diab_primary', 'n_diab_diag', 'medical_specialty']
 
-    all_cat = [c for c in cat_cols_original if c in df.columns] + added_cat
+    all_cat = [c for c in cat_cols_low_card if c in df.columns] + added_cat
 
     return df, all_cat
 
@@ -108,10 +137,10 @@ if __name__ == "__main__":
     print(f"[train] Loading data...")
     X, y, feature_names, fold_indices = preprocess_data()
 
-    print(f"[train] Building DataFrame with proper categorical types...")
+    print(f"[train] Building DataFrame with features...")
     df, cat_features = build_dataframe(X, feature_names)
 
-    print(f"[train] Model: CatBoost with native categorical handling")
+    print(f"[train] Model: CatBoost + interactions + medical_specialty")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -133,9 +162,9 @@ if __name__ == "__main__":
         val_pool = Pool(df_val, cat_features=cat_features)
 
         model = CatBoostClassifier(
-            iterations=4000,
+            iterations=3000,
             depth=6,
-            learning_rate=0.02,
+            learning_rate=0.03,
             rsm=0.8,
             l2_leaf_reg=3,
             random_seed=MODEL_SEED,
