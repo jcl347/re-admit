@@ -109,9 +109,9 @@ def build_dataframe(X, feature_names):
     # In label encoding, 0 typically = "No" (most common). Count non-zero = active meds
     df['n_active_meds'] = sum((df[col] != 0).astype(int) for col in med_cols if col in df.columns)
 
-    # Low-cardinality categoricals only (exclude diag_1/2/3 which have 700+ values)
+    # All label-encoded categoricals including high-cardinality diag_1/2/3
     cat_cols_low_card = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
-                         'admission_source_id',
+                         'admission_source_id', 'diag_1', 'diag_2', 'diag_3',
                          'max_glu_serum', 'A1Cresult',
                          'metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
                          'glimepiride', 'acetohexamide', 'glipizide', 'glyburide',
