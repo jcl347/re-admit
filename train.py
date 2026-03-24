@@ -162,11 +162,12 @@ if __name__ == "__main__":
         val_pool = Pool(df_val, cat_features=cat_features)
 
         model = CatBoostClassifier(
-            iterations=3000,
+            iterations=4000,
             depth=6,
-            learning_rate=0.03,
+            learning_rate=0.02,
             rsm=0.8,
-            l2_leaf_reg=3,
+            l2_leaf_reg=1,
+            min_data_in_leaf=20,
             random_seed=MODEL_SEED,
             verbose=0,
             eval_metric='AUC',
