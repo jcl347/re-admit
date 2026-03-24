@@ -1,0 +1,41 @@
+commit	auroc	f1	accuracy	memory_mb	training_seconds	status	description
+274302f	0.650677	0.262961	0.732897	70.7	10.3	keep	baseline XGBoost (max_depth=6, lr=0.1, n_est=500)
+7c68fc9	0.653096	0.266681	0.743922	79.3	18.9	keep	LightGBM (n_est=1000, lr=0.05, depth=7, leaves=63, scale_pos_weight)
+bf74848	0.671775	0.278363	0.692068	71.1	42.5	keep	CatBoost (iter=1000, lr=0.05, depth=6, auto_class_weights=Balanced)
+741df4a	0.661713	0.273222	0.750545	71.1	104.9	discard	CatBoost deeper (depth=8, iter=2000, lr=0.03) - overfit
+3763352	0.667418	0.277069	0.730342	81.8	68.9	discard	ensemble XGB+LGB+CB [0.25,0.30,0.45] - worse than CB alone
+17474ec	0.671526	0.278531	0.699399	71.1	82.0	discard	CatBoost iter=2000 lr=0.03 rsm=0.8 - same perf but slower
+02ef615	0.670886	0.276020	0.690653	78.8	43.6	discard	CatBoost + 5 interaction features - no improvement
+22e0bf4	0.657274	0.271699	0.726068	71.1	61.2	discard	CatBoost lr=0.08 l2=5 random_strength=2 - worse
+a1f5911	0.671932	0.000000	0.888401	103.0	226.9	keep	stacking CB+LGB+XGB with LR meta (AUROC +0.0001 but F1=0)
+097987d	0.671968	0.278230	0.695694	87.5	233.2	keep	optimized weighted ensemble CB+LGB+XGB (inner CV weights)
+8fc98bb	0.629621	0.245742	0.791807	71.1	145.2	discard	CatBoost Lossguide depth=8 leaves=64 - much worse
+5e23a84	0.668854	0.276845	0.704223	71.1	70.0	discard	CatBoost feature selection top 30 + Bayesian bootstrap - worse
+4c0a57c	0.677621	0.125905	0.881503	99.8	1268.9	keep	5-model ensemble CB+LGB+XGB+GBM+ET with optimized weights
+85e87d3	0.679293	0.040825	0.888312	75.7	416.7	keep	sklearn GBM solo (n_est=500, depth=5, lr=0.05) - new best!
+734c03d	0.680859	0.035979	0.888529	75.7	833.4	keep	GBM n_est=1000 lr=0.02 - new best!
+68b615c	0.681373	0.036343	0.888578	75.7	1662.3	keep	GBM n_est=2000 lr=0.01 - marginal improvement but very slow
+e2c5b17	0.679581	0.034124	0.888833	75.7	533.8	discard	GBM depth=4 lr=0.02 n_est=1000 more regularized - worse
+ff9abef	0.678604	0.110320	0.885200	77.1	1699.9	discard	GBM+CB blend 0.65/0.35 - worse than GBM alone
+ce20168	0.681144	0.038021	0.888686	75.6	2560.3	discard	GBM n_est=3000 lr=0.007 - diminishing returns and very slow
+5c4cfdd	0.675322	0.273316	0.646699	86.7	42.8	discard	HistGradientBoosting max_iter=2000 lr=0.01 - worse
+7452c79	0.679878	0.029813	0.888804	75.7	1692.6	discard	GBM exponential loss - worse
+96c9466	0.679848	0.278641	0.661724	70.7	59.5	discard	XGBoost deeply tuned (5000 iters, lr=0.005, depth=4, lossguide) - worse
+ddea525	0.000000	0.000000	0.000000	0.0	0.0	crash	GBM+SMOTE - killed (too slow with 2000 iters on oversampled data)
+eff2e89	0.676696	0.038532	0.888784	116.4	82.1	discard	CatBoost + SMOTE 0.3 - worse
+66060b6	0.675612	0.278388	0.698396	112.5	69.7	discard	LGBM is_unbalance 3000 iters lr=0.01 - worse
+847eaf6	0.636258	0.017981	0.888430	130.7	121.5	discard	MLP (256-128-64) - much worse
+d6bddd0	0.678029	0.277486	0.673476	75.7	2204.0	discard	GBM + balanced sample_weight - worse
+9a26e4e	0.668706	0.257727	0.546391	81.9	104.6	discard	rank-averaged ensemble CB+XGB+LGB - worse
+052ca47	0.680851	0.044833	0.888686	75.7	2571.7	discard	GBM depth=6 (was 5) - marginal regression
+29e716f	0.663351	0.274986	0.699526	91.0	111.3	discard	CatBoost + target encoding - worse
+c7eb28c	0.679584	0.277566	0.665173	70.7	125.1	discard	XGBoost 5000 iters lr=0.003 depth=5 - worse
+33737a1	0.663922	0.008732	0.888489	75.7	562.5	discard	AdaBoost 500 trees depth=3 - much worse
+610025d	0.670415	0.009431	0.888637	73.7	139.8	discard	CalibratedCatBoost isotonic - worse
+6317ef1	0.681232	0.038726	0.888823	75.7	1680.2	discard	GBM max_features=0.6 - marginal regression
+4883f48	0.678013	0.034731	0.888637	76.0	612.5	discard	Bagged GBM (5 bags x 500 trees) - worse
+dff7f0f	0.681572	0.036205	0.888647	75.5	4449.5	discard	diverse GBM ensemble (3 configs) - marginal +0.0002 but 2.7x slower
+130074a	0.000000	0.000000	0.000000	0.0	0.0	crash	seed-avg GBM 5 seeds - killed (estimated 2.3h exceeds timeout)
+fbf76ce	0.681396	0.036693	0.888617	75.5	2469.3	discard	seed-avg GBM 3 seeds x 1000 trees - negligible +0.00002 and 1.5x slower
+320bc9a	0.680416	0.032526	0.888499	78.7	2003.2	discard	GBM early stopping (cap=5000 lr=0.005 n_iter_no_change=100) - validation_fraction hurts
+6d41790	0.000000	0.000000	0.000000	0.0	0.0	crash	GBM + heavy feature eng (interactions+target enc+freq enc) - killed fold 5, worse anyway (~0.674)
