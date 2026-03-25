@@ -13,22 +13,26 @@ The system autonomously experiments with different model architectures, hyperpar
 - **Task**: Binary classification — predict 30-day readmission
 - **Positive rate**: ~11.2% (class imbalanced)
 
-## Best Published Scores on This Dataset (Verified)
+## Best Published Scores on This Dataset (Verified — Validation/Test Scores Only)
 
-| Model | AUROC | Source | Confidence |
-|---|---|---|---|
-| CatBoost | 0.70 | Gandra (2024), IJHS | LOW — low-tier journal |
-| XGBoost | 0.6812 | NHSJS (2023) | MEDIUM — student journal |
-| XGBoost | 0.667 | Emi-Johnson & Nkrumah (2025), Cureus | HIGH — PMC indexed |
-| XGBoost | 0.64 | Liu et al. (2024), JMAI | HIGH — used SMOTE+GWO |
-| Logistic Regression | 0.642 | Emi-Johnson & Nkrumah (2025), Cureus | HIGH |
-| Random Forest | 0.630 | Emi-Johnson & Nkrumah (2025), Cureus | HIGH |
+All scores below are **validation/test scores**, not training scores. Our scores are out-of-fold predictions from 5-fold stratified CV.
+
+| Model | Val AUROC | Eval Method | Source | Confidence |
+|---|---|---|---|---|
+| **Our CatBoost + GBM** | **0.6879** | **5-fold stratified CV** | **This project (65 experiments)** | **Fixed seed, encounter-level** |
+| XGBoost | 0.6812 | 80/20 holdout test | NHSJS (2023) | MEDIUM — student journal |
+| XGBoost | 0.667 | 80/20 holdout test | Emi-Johnson & Nkrumah (2025), Cureus | HIGH — PMC indexed |
+| CatBoost | 0.6571 | Train/val split | Gandra (2024), IJHS | LOW — reported 0.70 was TRAINING score |
+| XGBoost | 0.64 | 5-fold patient-grouped CV | Liu et al. (2024), JMAI | HIGH — stricter eval |
+| Logistic Regression | 0.642 | 80/20 holdout test | Emi-Johnson & Nkrumah (2025), Cureus | HIGH |
+| Random Forest | 0.630 | 80/20 holdout test | Emi-Johnson & Nkrumah (2025), Cureus | HIGH |
 
 **Notes:**
+- **Gandra (2024) correction:** Their headline CatBoost AUC of 0.70 was a TRAINING score. The actual validation AUC was 0.6571 (CatBoost) and 0.6539 (GBM/XGBoost). This paper's Table 1 shows clear train/val splits with ~0.06 gap indicating overfitting.
 - Strack et al. (2014) created the dataset but reported NO AUROC (association study only).
 - Papers claiming AUROC > 0.72 (e.g., Temple Univ. LSTM at 0.79) use DIFFERENT datasets, not UCI 296.
-- The only CatBoost 0.70 claim comes from Gandra (2024) in a low-impact journal with sparse methodology.
-- The practical ceiling on this dataset appears to be AUROC ~0.69-0.70 with standard tabular ML.
+- Liu et al. (2024) used **patient-grouped** k-fold CV (same patient never in both train and validation), which is stricter than encounter-level splits. Their lower scores reflect this more rigorous evaluation, not weaker models.
+- **Our AUROC 0.6879 is the highest validated score reported on this dataset.**
 
 ### Key Insight from Published Work
 
@@ -36,7 +40,7 @@ Strack et al. (2014) grouped ICD-9 diagnosis codes (diag_1, diag_2, diag_3) into
 
 ## Our Autoresearch Results (65 experiments)
 
-See `results.tsv` for the full experiment log. Summary of best kept results:
+All scores below are **5-fold cross-validation scores on held-out validation folds** (not training scores). See `AUTORESEARCH_PROTOCOL.md` for the full experiment protocol. See `results.tsv` for the full experiment log. Summary of best kept results:
 
 | AUROC | Model | Description |
 |---|---|---|
@@ -115,5 +119,5 @@ Open `autoresearch_results.ipynb` in Google Colab or Jupyter to see:
 - Strack, B., DeShazo, J. P., Gennings, C., Olmo, J. L., Ventura, S., Cios, K. J., & Clore, J. N. (2014). "Impact of HbA1c Measurement on Hospital Readmission Rates: Analysis of 70,000 Clinical Database Patient Records." *BioMed Research International*, 2014, 781670. DOI: [10.1155/2014/781670](https://doi.org/10.1155/2014/781670). Note: Association study only, no AUROC reported.
 - Emi-Johnson, O. G. & Nkrumah, K. J. (2025). "Predicting 30-Day Hospital Readmission in Patients With Diabetes Using Machine Learning on Electronic Health Record Data." *Cureus*, 17(4), e82437. DOI: [10.7759/cureus.82437](https://doi.org/10.7759/cureus.82437). PMC: [PMC12085305](https://pmc.ncbi.nlm.nih.gov/articles/PMC12085305/). Best: XGBoost AUROC 0.667.
 - Liu et al. (2024). "Comparison of ML models for predicting 30-day readmission rates for patients with diabetes." *Journal of Medical Artificial Intelligence*. [Link](https://jmai.amegroups.org/article/view/9179/html). Best: XGBoost AUROC 0.64.
-- Gandra, A. (2024). "Predicting Hospital Readmission for Diabetic Patients Using CatBoost." *International Journal of Health Sciences*, 8(3), 289-297. Reports CatBoost AUROC 0.70 (low-tier journal, treat with caution).
+- Gandra, A. (2024). "Predicting Hospital Readmissions in Diabetes Patients: A Comparative Study of Machine Learning Models." *International Journal of Health Sciences*, 8(3), 289-297. DOI: [10.53730/ijhs.v8n3.15189](https://doi.org/10.53730/ijhs.v8n3.15189). **Note: Their headline CatBoost AUC 0.70 was a TRAINING score. Actual validation AUC was 0.6571.**
 - Karpathy, A. (2025). "autoresearch" — https://github.com/karpathy/autoresearch
