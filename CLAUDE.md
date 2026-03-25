@@ -4,8 +4,28 @@
 Reach AUROC 0.70 on the UCI Diabetes 130-US Hospitals 30-day readmission prediction task.
 Current best: **AUROC 0.6879** (CatBoost + GBM ensemble with native categorical handling + ICD-9 groups + interactions + medical_specialty).
 
+**Note:** Our current best already exceeds all high-confidence published results on this dataset. The 0.70 target is ambitious and may be near the ceiling for conventional ML on these features.
+
+## Published Baselines (Verified)
+
+| Paper | Best Model | AUROC | Confidence |
+|---|---|---|---|
+| Gandra 2024 (IJHS) | CatBoost | **0.70** | LOW — low-tier journal, sparse methods |
+| NHSJS 2023 | XGBoost | 0.6812 | MEDIUM — student journal, clear methods |
+| Emi-Johnson & Nkrumah 2025 (Cureus) | XGBoost | 0.667 | HIGH — peer-reviewed, PMC indexed |
+| Liu et al. 2024 (JMAI) | XGBoost | 0.64 | HIGH — used SMOTE + GWO feature selection |
+| **Our best** | **CatBoost + GBM** | **0.6879** | **5-fold CV, fixed seed** |
+
+**Important corrections from prior versions of this file:**
+- Strack et al. (2014) did NOT report any AUROC — it was an association study, not predictive modeling.
+- Emi-Johnson & Nkrumah (2025) did NOT test CatBoost and did NOT cite CatBoost AUROC 0.70. Their best was XGBoost at 0.667.
+- The CatBoost 0.70 claim comes from Gandra (2024) in a low-tier journal (IJHS / sciencescholar.us).
+- Papers claiming AUROC > 0.72 (e.g., Temple University LSTM at 0.79) use DIFFERENT datasets, not UCI 296.
+
 ## Key Paper: Strack et al. (2014)
 **Citation:** Strack, B., DeShazo, J.P., Gennings, C., et al. "Impact of HbA1c Measurement on Hospital Readmission Rates." *BioMed Research International*, 2014, 781670.
+
+This paper created the dataset and studied the statistical association between HbA1c measurement and readmission. It is NOT a predictive modeling paper and reports no AUROC. However, its ICD-9 grouping scheme (Table 2) is widely used in subsequent ML studies.
 
 ### Their ICD-9 Diagnosis Grouping (Table 2)
 The original paper groups the ~700+ unique ICD-9 3-digit codes in diag_1, diag_2, diag_3 into **9 disease categories**:
@@ -29,26 +49,25 @@ The original paper groups the ~700+ unique ICD-9 3-digit codes in diag_1, diag_2
 Our prepare.py truncates ICD-9 codes to 3 chars and label-encodes them as ordinal integers. This gives ~700+ unique integer values that GBM must split on individually. Grouping into 9 categories:
 1. Massively reduces noise from rare ICD-9 codes
 2. Captures medically meaningful disease relationships
-3. Is the standard preprocessing used by papers achieving AUROC ≥ 0.70
 
 ### Implementation in train.py
-Since prepare.py is READ-ONLY, we must do ICD-9 grouping inside `train_and_predict()`:
+Since prepare.py is READ-ONLY, we must do ICD-9 grouping inside `build_dataframe()`:
 1. Load the raw CSV to get original ICD-9 string codes
 2. Map each code to one of 9 disease categories (integer 0-8)
-3. Replace the label-encoded diag_1/diag_2/diag_3 columns (indices 13, 14, 15) with grouped versions
-4. Optionally add both grouped AND original features
+3. Add as extra features alongside the original label-encoded diag columns
 
-## Key Paper: Emi-Johnson & Nkrumah (2025) — CatBoost AUROC 0.70
+## Key Paper: Emi-Johnson & Nkrumah (2025)
 **Citation:** Emi-Johnson, O.G. & Nkrumah, K.J. "Predicting 30-Day Hospital Readmission in Patients With Diabetes Using ML on EHR Data." *Cureus*, 17(4), e82437. PMC12085305.
 
 ### Their Approach
 - Used class weighting (NOT SMOTE) for imbalance handling
 - One-hot encoding for categoricals, standardization for continuous
-- XGBoost achieved 0.667 AUROC; they cited CatBoost 0.70 from related work
+- XGBoost achieved 0.667 AUROC (their best); LR 0.642, RF 0.630, DNN 0.579
 - Top SHAP features: **number_inpatient**, **num_medications**, **time_in_hospital**, **insulin use**
+- They did NOT test CatBoost
 
 ## Preprocessing Insights (What Matters Most)
-1. **ICD-9 grouping** — biggest potential gain, reduces 700+ codes to 9 categories
+1. **ICD-9 grouping** — reduces 700+ codes to 9 categories, standard preprocessing
 2. **Discharge disposition** — codes 11, 13, 14, 19, 20, 21 = patient died/hospice → can't be readmitted
 3. **number_inpatient** — consistently #1 predictor across all studies
 4. **num_medications × time_in_hospital** — key interaction
@@ -91,6 +110,7 @@ Since prepare.py is READ-ONLY, we must do ICD-9 grouping inside `train_and_predi
 ## Next Steps (Priority Order)
 1. **Stacking meta-learner** — use CatBoost + GBM + XGBoost OOF predictions as features for LR
 2. **Feature selection** — remove noisy features that may be hurting CatBoost
-3. **CatBoost with symmetric tree + ordered boosting tuning** — try different boosting types
-4. **Patient-level deduplication** — some patients appear multiple times; use patient_nbr for grouping
-5. **Target: AUROC 0.70** — need +0.012 from current 0.6879
+3. **CatBoost with ordered boosting** — try `boosting_type='Ordered'`
+4. **Patient-level features** — encounter count per patient_nbr, age as numeric midpoint
+5. **Seed averaging** — train same model with multiple seeds, average predictions
+6. **Target: AUROC 0.70** — need +0.012 from current 0.6879
