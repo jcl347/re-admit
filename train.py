@@ -1,9 +1,9 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 70: CatBoost + XGBoost ensemble blend.
-CatBoost uses native categoricals. XGBoost uses numeric features.
-Blend 0.7/0.3 (CatBoost dominant since it's stronger).
+Experiment 71: CatBoost + XGBoost + sklearn GBM 3-model ensemble.
+CatBoost uses native categoricals. XGBoost + GBM use numeric features.
+Blend 0.55/0.25/0.20 (CatBoost dominant).
 """
 
 import gc
@@ -147,7 +147,7 @@ if __name__ == "__main__":
         if col in df_numeric.columns:
             df_numeric[col] = pd.to_numeric(df_numeric[col], errors='coerce').fillna(0)
 
-    print(f"[train] Model: CatBoost + XGBoost ensemble (0.7/0.3 blend)")
+    print(f"[train] Model: CatBoost + XGBoost + GBM 3-model ensemble")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -161,6 +161,7 @@ if __name__ == "__main__":
     for fold_i, (train_idx, val_idx) in enumerate(fold_indices):
         from catboost import CatBoostClassifier, Pool
         from xgboost import XGBClassifier
+        from sklearn.ensemble import GradientBoostingClassifier
 
         df_train = df.iloc[train_idx]
         df_val = df.iloc[val_idx]
@@ -210,8 +211,23 @@ if __name__ == "__main__":
         del xgb_model
         gc.collect()
 
-        # Blend
-        y_pred_proba = 0.7 * cb_pred + 0.3 * xgb_pred
+        # sklearn GBM on numeric features
+        gbm_model = GradientBoostingClassifier(
+            n_estimators=2000,
+            max_depth=5,
+            learning_rate=0.01,
+            subsample=0.8,
+            max_features=0.8,
+            random_state=MODEL_SEED,
+        )
+        gbm_model.fit(X_train_num, y_train)
+        gbm_pred = gbm_model.predict_proba(X_val_num)[:, 1]
+
+        del gbm_model
+        gc.collect()
+
+        # 3-model blend
+        y_pred_proba = 0.55 * cb_pred + 0.25 * xgb_pred + 0.20 * gbm_pred
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
@@ -220,9 +236,10 @@ if __name__ == "__main__":
 
         cb_auroc = roc_auc_score(y_val, cb_pred)
         xgb_auroc = roc_auc_score(y_val, xgb_pred)
+        gbm_auroc = roc_auc_score(y_val, gbm_pred)
         print(f"  Fold {fold_i+1}/{len(fold_indices)}: "
               f"AUROC={fold_metrics['auroc']:.4f} "
-              f"(CB={cb_auroc:.4f} XGB={xgb_auroc:.4f})")
+              f"(CB={cb_auroc:.4f} XGB={xgb_auroc:.4f} GBM={gbm_auroc:.4f})")
 
         del df_train, df_val
         gc.collect()
