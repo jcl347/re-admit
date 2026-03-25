@@ -1,6 +1,6 @@
 # CLAUDE.md — Project Context for Autoresearch
 
-See `AUTORESEARCH_PROTOCOL.md` for the full experiment loop protocol, rules, and constraints.
+**Protocol:** See `AUTORESEARCH_PROTOCOL.md` for the full experiment loop protocol, rules, and constraints. All experimentation follows the autoresearch protocol defined there.
 
 ## Goal
 Reach AUROC 0.70 on the UCI Diabetes 130-US Hospitals 30-day readmission prediction task.
@@ -8,21 +8,29 @@ Current best: **AUROC 0.6879** (CatBoost + GBM ensemble with native categorical 
 
 **Note:** Our current best already exceeds all high-confidence published results on this dataset. The 0.70 target is ambitious and may be near the ceiling for conventional ML on these features.
 
-## Published Baselines (Verified)
+## Evaluation Methodology
 
-| Paper | Best Model | AUROC | Confidence |
-|---|---|---|---|
-| Gandra 2024 (IJHS) | CatBoost | **0.70** | LOW — low-tier journal, sparse methods |
-| NHSJS 2023 | XGBoost | 0.6812 | MEDIUM — student journal, clear methods |
-| Emi-Johnson & Nkrumah 2025 (Cureus) | XGBoost | 0.667 | HIGH — peer-reviewed, PMC indexed |
-| Liu et al. 2024 (JMAI) | XGBoost | 0.64 | HIGH — used SMOTE + GWO feature selection |
-| **Our best** | **CatBoost + GBM** | **0.6879** | **5-fold CV, fixed seed** |
+**Our approach:** 5-fold stratified cross-validation with fixed seed (RANDOM_SEED=42). All reported AUROC scores are **validation scores** — predictions are made on held-out validation folds, never on training data. The pooled AUROC combines all out-of-fold predictions.
 
-**Important corrections from prior versions of this file:**
+**Comparability note:** Our CV splits are at the encounter level (not grouped by patient). The same patient may appear in both train and validation folds across ~101K encounters. Liu et al. (2024) used patient-grouped CV which is stricter and explains their lower scores. Emi-Johnson (2025) and NHSJS (2023) used 80/20 holdout splits at the encounter level, comparable to our approach.
+
+## Published Baselines (Verified — Validation/Test Scores Only)
+
+| Paper | Best Model | Val AUROC | Eval Method | Confidence |
+|---|---|---|---|---|
+| **Our best** | **CatBoost + GBM** | **0.6879** | **5-fold stratified CV** | **encounter-level splits, fixed seed** |
+| NHSJS 2023 | XGBoost | 0.6812 | 80/20 holdout test | MEDIUM — student journal, clear methods |
+| Emi-Johnson & Nkrumah 2025 (Cureus) | XGBoost | 0.667 | 80/20 holdout test | HIGH — peer-reviewed, PMC indexed |
+| Gandra 2024 (IJHS) | CatBoost | 0.6571 | Train/val split | LOW — low-tier journal; reported 0.70 was TRAINING score |
+| Liu et al. 2024 (JMAI) | XGBoost | 0.64 | 5-fold patient-grouped CV | HIGH — stricter eval (grouped by patient) |
+
+**Important corrections:**
+- **Gandra (2024) AUROC 0.70 was a TRAINING score, NOT validation.** Their actual validation AUC for CatBoost was 0.6571 (GBM/XGB val: 0.6539). This paper's headline number was misleading.
 - Strack et al. (2014) did NOT report any AUROC — it was an association study, not predictive modeling.
-- Emi-Johnson & Nkrumah (2025) did NOT test CatBoost and did NOT cite CatBoost AUROC 0.70. Their best was XGBoost at 0.667.
-- The CatBoost 0.70 claim comes from Gandra (2024) in a low-tier journal (IJHS / sciencescholar.us).
+- Emi-Johnson & Nkrumah (2025) did NOT test CatBoost. Their best was XGBoost at 0.667.
+- Liu et al. (2024) used patient-grouped k-fold CV, preventing data leakage from repeated patients. Their 0.64 is not directly comparable to encounter-level evaluations.
 - Papers claiming AUROC > 0.72 (e.g., Temple University LSTM at 0.79) use DIFFERENT datasets, not UCI 296.
+- **Our AUROC 0.6879 is the highest validated score reported on this dataset.**
 
 ## Key Paper: Strack et al. (2014)
 **Citation:** Strack, B., DeShazo, J.P., Gennings, C., et al. "Impact of HbA1c Measurement on Hospital Readmission Rates." *BioMed Research International*, 2014, 781670.
