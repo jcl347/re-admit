@@ -1,9 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 72: CatBoost + XGBoost with multi-weight grid search.
-Try multiple blend weights and report all results.
-Also tune XGBoost with more estimators.
+Experiment 73: CatBoost + stronger XGBoost ensemble blend 0.75/0.25.
+XGBoost bumped to 3000 estimators and depth=6 to be a stronger contributor.
 """
 
 import gc
@@ -193,13 +192,14 @@ if __name__ == "__main__":
         X_val_num = df_numeric.iloc[val_idx].values.astype(np.float64)
 
         xgb_model = XGBClassifier(
-            n_estimators=2000,
-            max_depth=5,
+            n_estimators=3000,
+            max_depth=6,
             learning_rate=0.01,
             subsample=0.8,
             colsample_bytree=0.8,
             reg_alpha=0.1,
             reg_lambda=1.0,
+            min_child_weight=5,
             random_state=MODEL_SEED,
             eval_metric='auc',
             verbosity=0,
@@ -210,30 +210,19 @@ if __name__ == "__main__":
         del xgb_model
         gc.collect()
 
-        # Try multiple blend weights
-        cb_auroc = roc_auc_score(y_val, cb_pred)
-        xgb_auroc = roc_auc_score(y_val, xgb_pred)
-
-        best_w = 0.7
-        best_blend_auroc = 0
-        for w in [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8]:
-            blend = w * cb_pred + (1 - w) * xgb_pred
-            blend_auroc = roc_auc_score(y_val, blend)
-            if blend_auroc > best_blend_auroc:
-                best_blend_auroc = blend_auroc
-                best_w = w
-
-        # Use fixed 0.65 weight (compromise) for consistency across folds
-        y_pred_proba = 0.65 * cb_pred + 0.35 * xgb_pred
+        # Blend
+        y_pred_proba = 0.75 * cb_pred + 0.25 * xgb_pred
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
         all_y_true.extend(y_val.tolist())
         all_y_proba.extend(y_pred_proba.tolist())
 
+        cb_auroc = roc_auc_score(y_val, cb_pred)
+        xgb_auroc = roc_auc_score(y_val, xgb_pred)
         print(f"  Fold {fold_i+1}/{len(fold_indices)}: "
               f"AUROC={fold_metrics['auroc']:.4f} "
-              f"(CB={cb_auroc:.4f} XGB={xgb_auroc:.4f} best_w={best_w:.2f} best={best_blend_auroc:.4f})")
+              f"(CB={cb_auroc:.4f} XGB={xgb_auroc:.4f})")
 
         del df_train, df_val
         gc.collect()

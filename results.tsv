@@ -60,3 +60,4 @@ e52108c	0.000000	0.000000	0.000000	0.0	0.0	crash	exp67: stacking CB+GBM->LR meta
 3746a5d	0.000000	0.000000	0.000000	0.0	0.0	crash	exp69: CatBoost lr=0.01 6000 iters l2=3 bagging_temp=0.5 - killed after fold 3 (OOM). ~same as baseline
 30fc0ad	0.688461	0.048128	0.889344	162.7	2353.0	keep	exp70: CatBoost+XGBoost 0.7/0.3 blend - NEW BEST 0.6885! +0.0008 over prev best
 87b5d3f	0.685400	0.000000	0.000000	0.0	0.0	discard	exp71: 3-model CB+XGB+GBM 0.55/0.25/0.20 - worse (GBM adds noise). Killed after fold 2
+5dc47cb	0.688416	0.048128	0.889344	162.7	2424.2	discard	exp72: CB+XGB 0.65/0.35 blend - slightly worse than 0.7/0.3. Optimal weight ~0.75
