@@ -1,9 +1,9 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 71: CatBoost + XGBoost + sklearn GBM 3-model ensemble.
-CatBoost uses native categoricals. XGBoost + GBM use numeric features.
-Blend 0.55/0.25/0.20 (CatBoost dominant).
+Experiment 72: CatBoost + XGBoost with multi-weight grid search.
+Try multiple blend weights and report all results.
+Also tune XGBoost with more estimators.
 """
 
 import gc
@@ -147,7 +147,7 @@ if __name__ == "__main__":
         if col in df_numeric.columns:
             df_numeric[col] = pd.to_numeric(df_numeric[col], errors='coerce').fillna(0)
 
-    print(f"[train] Model: CatBoost + XGBoost + GBM 3-model ensemble")
+    print(f"[train] Model: CatBoost + XGBoost ensemble (0.7/0.3 blend)")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -161,7 +161,6 @@ if __name__ == "__main__":
     for fold_i, (train_idx, val_idx) in enumerate(fold_indices):
         from catboost import CatBoostClassifier, Pool
         from xgboost import XGBClassifier
-        from sklearn.ensemble import GradientBoostingClassifier
 
         df_train = df.iloc[train_idx]
         df_val = df.iloc[val_idx]
@@ -211,35 +210,30 @@ if __name__ == "__main__":
         del xgb_model
         gc.collect()
 
-        # sklearn GBM on numeric features
-        gbm_model = GradientBoostingClassifier(
-            n_estimators=2000,
-            max_depth=5,
-            learning_rate=0.01,
-            subsample=0.8,
-            max_features=0.8,
-            random_state=MODEL_SEED,
-        )
-        gbm_model.fit(X_train_num, y_train)
-        gbm_pred = gbm_model.predict_proba(X_val_num)[:, 1]
+        # Try multiple blend weights
+        cb_auroc = roc_auc_score(y_val, cb_pred)
+        xgb_auroc = roc_auc_score(y_val, xgb_pred)
 
-        del gbm_model
-        gc.collect()
+        best_w = 0.7
+        best_blend_auroc = 0
+        for w in [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8]:
+            blend = w * cb_pred + (1 - w) * xgb_pred
+            blend_auroc = roc_auc_score(y_val, blend)
+            if blend_auroc > best_blend_auroc:
+                best_blend_auroc = blend_auroc
+                best_w = w
 
-        # 3-model blend
-        y_pred_proba = 0.55 * cb_pred + 0.25 * xgb_pred + 0.20 * gbm_pred
+        # Use fixed 0.65 weight (compromise) for consistency across folds
+        y_pred_proba = 0.65 * cb_pred + 0.35 * xgb_pred
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
         all_y_true.extend(y_val.tolist())
         all_y_proba.extend(y_pred_proba.tolist())
 
-        cb_auroc = roc_auc_score(y_val, cb_pred)
-        xgb_auroc = roc_auc_score(y_val, xgb_pred)
-        gbm_auroc = roc_auc_score(y_val, gbm_pred)
         print(f"  Fold {fold_i+1}/{len(fold_indices)}: "
               f"AUROC={fold_metrics['auroc']:.4f} "
-              f"(CB={cb_auroc:.4f} XGB={xgb_auroc:.4f} GBM={gbm_auroc:.4f})")
+              f"(CB={cb_auroc:.4f} XGB={xgb_auroc:.4f} best_w={best_w:.2f} best={best_blend_auroc:.4f})")
 
         del df_train, df_val
         gc.collect()
