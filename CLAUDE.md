@@ -1,5 +1,7 @@
 # CLAUDE.md — Project Context for Autoresearch
 
+See `AUTORESEARCH_PROTOCOL.md` for the full experiment loop protocol, rules, and constraints.
+
 ## Goal
 Reach AUROC 0.70 on the UCI Diabetes 130-US Hospitals 30-day readmission prediction task.
 Current best: **AUROC 0.6879** (CatBoost + GBM ensemble with native categorical handling + ICD-9 groups + interactions + medical_specialty).
