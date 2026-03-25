@@ -1,8 +1,7 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 68: CatBoost with Ordered boosting type.
-Ordered boosting reduces prediction shift (overfitting on gradient estimates).
+Experiment 69: CatBoost with lower lr (0.01), more iters (6000), bagging_temperature=0.5.
 """
 
 import gc
@@ -36,23 +35,23 @@ def icd9_to_group(code_str):
     except ValueError:
         return 8
     if 250 <= num < 251:
-        return 0
+        return 0  # Diabetes
     elif (390 <= num <= 459) or (785 <= num < 786):
-        return 1
+        return 1  # Circulatory
     elif (460 <= num <= 519) or (786 <= num < 787):
-        return 2
+        return 2  # Respiratory
     elif (520 <= num <= 579) or (787 <= num < 788):
-        return 3
+        return 3  # Digestive
     elif 800 <= num <= 999:
-        return 4
+        return 4  # Injury
     elif 710 <= num <= 739:
-        return 5
+        return 5  # Musculoskeletal
     elif (580 <= num <= 629) or (788 <= num < 789):
-        return 6
+        return 6  # Genitourinary
     elif 140 <= num <= 239:
-        return 7
+        return 7  # Neoplasms
     else:
-        return 8
+        return 8  # Other
 
 
 def build_dataframe(X, feature_names):
@@ -65,13 +64,16 @@ def build_dataframe(X, feature_names):
         'medical_specialty'
     ])
 
+    # ICD-9 disease group features
     df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
     df['diag_group_2'] = raw['diag_2'].apply(icd9_to_group).astype(int).astype(str)
     df['diag_group_3'] = raw['diag_3'].apply(icd9_to_group).astype(int).astype(str)
 
+    # Dead/hospice flag
     dead_codes = {11, 13, 14, 19, 20, 21}
     df['is_dead'] = raw['discharge_disposition_id'].isin(dead_codes).astype(int).astype(str)
 
+    # Diabetes flags
     df['is_diab_primary'] = (df['diag_group_1'] == '0').astype(int).astype(str)
     df['n_diab_diag'] = (
         (df['diag_group_1'] == '0').astype(int) +
@@ -79,6 +81,7 @@ def build_dataframe(X, feature_names):
         (df['diag_group_3'] == '0').astype(int)
     ).astype(str)
 
+    # Medical specialty
     from sklearn.preprocessing import LabelEncoder
     le = LabelEncoder()
     df['medical_specialty'] = le.fit_transform(raw['medical_specialty'].fillna('?').astype(str))
@@ -87,12 +90,14 @@ def build_dataframe(X, feature_names):
     del raw
     gc.collect()
 
+    # Interaction features (numeric)
     df['inpatient_x_meds'] = df['number_inpatient'] * df['num_medications']
     df['inpatient_x_time'] = df['number_inpatient'] * df['time_in_hospital']
     df['meds_x_time'] = df['num_medications'] * df['time_in_hospital']
     df['emergency_x_inpatient'] = df['number_emergency'] * df['number_inpatient']
     df['num_total_visits'] = df['number_outpatient'] + df['number_emergency'] + df['number_inpatient']
 
+    # Active medications count
     med_cols = ['metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
                 'glimepiride', 'acetohexamide', 'glipizide', 'glyburide',
                 'tolbutamide', 'pioglitazone', 'rosiglitazone', 'acarbose',
@@ -102,6 +107,7 @@ def build_dataframe(X, feature_names):
                 'metformin-pioglitazone']
     df['n_active_meds'] = sum((df[col] != 0).astype(int) for col in med_cols if col in df.columns)
 
+    # Categorical columns for CatBoost
     cat_cols = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
                 'admission_source_id', 'diag_1', 'diag_2', 'diag_3',
                 'max_glu_serum', 'A1Cresult',
@@ -133,7 +139,7 @@ if __name__ == "__main__":
     del X
     gc.collect()
 
-    print(f"[train] Model: CatBoost Ordered boosting")
+    print(f"[train] Model: CatBoost + interactions + medical_specialty")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -155,17 +161,17 @@ if __name__ == "__main__":
         val_pool = Pool(df_val, cat_features=cat_features)
 
         model = CatBoostClassifier(
-            iterations=4000,
+            iterations=6000,
             depth=6,
-            learning_rate=0.02,
+            learning_rate=0.01,
             rsm=0.8,
-            l2_leaf_reg=1,
+            l2_leaf_reg=3,
             min_data_in_leaf=20,
             random_seed=MODEL_SEED,
             verbose=0,
             eval_metric='AUC',
             task_type='CPU',
-            boosting_type='Ordered',
+            bagging_temperature=0.5,
         )
         model.fit(train_pool)
         y_pred_proba = model.predict_proba(val_pool)[:, 1]
