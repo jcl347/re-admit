@@ -171,5 +171,5 @@ The idea is that you are a completely autonomous researcher trying things out. I
 | **Our best (CatBoost+GBM)** | **0.6879** | **5-fold stratified CV** | **This project** |
 | XGBoost | 0.6812 | 80/20 holdout test | NHSJS (2023) |
 | XGBoost | 0.667 | 80/20 holdout test | Emi-Johnson & Nkrumah (2025), Cureus |
-| CatBoost | 0.6571 | Train/val split | Gandra (2024), IJHS (0.70 was TRAINING score) |
+| CatBoost | 0.6571 | 70/30 train/val split | Gandra (2024), IJHS (0.70 was TRAINING score) |
 | XGBoost | 0.64 | 5-fold patient-grouped CV | Liu et al. (2024), JMAI (stricter — grouped by patient) |

@@ -21,11 +21,11 @@ Current best: **AUROC 0.6879** (CatBoost + GBM ensemble with native categorical 
 | **Our best** | **CatBoost + GBM** | **0.6879** | **5-fold stratified CV** | **encounter-level splits, fixed seed** |
 | NHSJS 2023 | XGBoost | 0.6812 | 80/20 holdout test | MEDIUM — student journal, clear methods |
 | Emi-Johnson & Nkrumah 2025 (Cureus) | XGBoost | 0.667 | 80/20 holdout test | HIGH — peer-reviewed, PMC indexed |
-| Gandra 2024 (IJHS) | CatBoost | 0.6571 | Train/val split | LOW — low-tier journal; reported 0.70 was TRAINING score |
+| Gandra 2024 (IJHS) | CatBoost | 0.6571 | 70/30 train/val split | LOW — reported 0.70 was TRAINING score |
 | Liu et al. 2024 (JMAI) | XGBoost | 0.64 | 5-fold patient-grouped CV | HIGH — stricter eval (grouped by patient) |
 
 **Important corrections:**
-- **Gandra (2024) AUROC 0.70 was a TRAINING score, NOT validation.** Their actual validation AUC for CatBoost was 0.6571 (GBM/XGB val: 0.6539). This paper's headline number was misleading.
+- **Gandra (2024) AUROC 0.70 was a TRAINING score, NOT validation.** Their Table 1 shows CatBoost val AUC = 0.6571, GBM/XGB val = 0.6539. The paper misleadingly reports training AUC in the abstract.
 - Strack et al. (2014) did NOT report any AUROC — it was an association study, not predictive modeling.
 - Emi-Johnson & Nkrumah (2025) did NOT test CatBoost. Their best was XGBoost at 0.667.
 - Liu et al. (2024) used patient-grouped k-fold CV, preventing data leakage from repeated patients. Their 0.64 is not directly comparable to encounter-level evaluations.

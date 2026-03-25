@@ -22,7 +22,7 @@ All scores below are **validation/test scores**, not training scores. Our scores
 | **Our CatBoost + GBM** | **0.6879** | **5-fold stratified CV** | **This project (65 experiments)** | **Fixed seed, encounter-level** |
 | XGBoost | 0.6812 | 80/20 holdout test | NHSJS (2023) | MEDIUM — student journal |
 | XGBoost | 0.667 | 80/20 holdout test | Emi-Johnson & Nkrumah (2025), Cureus | HIGH — PMC indexed |
-| CatBoost | 0.6571 | Train/val split | Gandra (2024), IJHS | LOW — reported 0.70 was TRAINING score |
+| CatBoost | 0.6571 | 70/30 train/val split | Gandra (2024), IJHS | LOW — reported 0.70 was TRAINING score |
 | XGBoost | 0.64 | 5-fold patient-grouped CV | Liu et al. (2024), JMAI | HIGH — stricter eval |
 | Logistic Regression | 0.642 | 80/20 holdout test | Emi-Johnson & Nkrumah (2025), Cureus | HIGH |
 | Random Forest | 0.630 | 80/20 holdout test | Emi-Johnson & Nkrumah (2025), Cureus | HIGH |
@@ -31,7 +31,7 @@ All scores below are **validation/test scores**, not training scores. Our scores
 - **Gandra (2024) correction:** Their headline CatBoost AUC of 0.70 was a TRAINING score. The actual validation AUC was 0.6571 (CatBoost) and 0.6539 (GBM/XGBoost). This paper's Table 1 shows clear train/val splits with ~0.06 gap indicating overfitting.
 - Strack et al. (2014) created the dataset but reported NO AUROC (association study only).
 - Papers claiming AUROC > 0.72 (e.g., Temple Univ. LSTM at 0.79) use DIFFERENT datasets, not UCI 296.
-- Liu et al. (2024) used **patient-grouped** k-fold CV (same patient never in both train and validation), which is stricter than encounter-level splits. Their lower scores reflect this more rigorous evaluation, not weaker models.
+- Liu et al. (2024) used **patient-grouped** k-fold CV (same patient never in both train and validation), which is stricter than encounter-level splits.
 - **Our AUROC 0.6879 is the highest validated score reported on this dataset.**
 
 ### Key Insight from Published Work
@@ -40,20 +40,25 @@ Strack et al. (2014) grouped ICD-9 diagnosis codes (diag_1, diag_2, diag_3) into
 
 ## Our Autoresearch Results (65 experiments)
 
-All scores below are **5-fold cross-validation scores on held-out validation folds** (not training scores). See `AUTORESEARCH_PROTOCOL.md` for the full experiment protocol. See `results.tsv` for the full experiment log. Summary of best kept results:
+All scores are **5-fold CV validation scores** (out-of-fold predictions, never training scores). See `AUTORESEARCH_PROTOCOL.md` for the experiment protocol. See `results.tsv` for the full experiment log.
 
-| AUROC | Model | Description |
-|---|---|---|
-| **0.6879** | CatBoost + GBM ensemble | CatBoost native cats + interactions + medical_specialty, blended 0.6/0.4 with GBM (best) |
-| 0.6878 | CatBoost (5000 iter) | 5000 iters, lr=0.015, native cats + interactions + medical_specialty |
-| 0.6877 | CatBoost (4000 iter) | 4000 iters, lr=0.02, l2=1, native cats + interactions + medical_specialty |
-| 0.6877 | CatBoost + rich features | + ratio features, age interactions, discharge groups (no improvement) |
-| 0.6874 | CatBoost + interactions | 3000 iters + interaction features + medical_specialty |
-| 0.6861 | CatBoost (tuned) | 4000 iters, lr=0.02, native categorical handling |
-| 0.6859 | CatBoost (native cats) | First CatBoost with proper DataFrame + categorical types |
-| 0.6818 | sklearn GBM + ICD-9 | n_est=2000, lr=0.01, depth=5 + Strack disease groups + is_dead flag |
-| 0.6814 | sklearn GradientBoosting | n_est=2000, lr=0.01, depth=5 |
-| 0.6793 | sklearn GradientBoosting | n_est=500, lr=0.05 |
+### Experiment Progression
+
+Early experiments established baselines with standard models, then progressed through feature engineering and model-specific optimizations:
+
+| # | Val AUROC | Model | Description |
+|---|---|---|---|
+| 1 | 0.6507 | XGBoost | Initial baseline |
+| 5 | 0.6718 | CatBoost | CatBoost balanced weights |
+| 10 | 0.6793 | sklearn GBM | n_est=500, depth=5, lr=0.05 |
+| 20 | 0.6809 | sklearn GBM | n_est=1000, lr=0.02 |
+| 30 | 0.6814 | sklearn GBM | n_est=2000, lr=0.01, depth=5 |
+| 40 | 0.6818 | sklearn GBM + ICD-9 | + Strack disease groups + is_dead flag |
+| 55 | 0.6859 | CatBoost (native cats) | **Breakthrough:** proper DataFrame + categorical types |
+| 58 | 0.6874 | CatBoost + interactions | + interaction features + medical_specialty |
+| 60 | 0.6877 | CatBoost (4000 iter) | lr=0.02, l2=1, native cats + interactions |
+| 62 | 0.6878 | CatBoost (5000 iter) | 5000 iters, lr=0.015 |
+| 65 | **0.6879** | **CatBoost + GBM ensemble** | **CatBoost native cats blended 0.6/0.4 with GBM (best)** |
 
 **Key breakthrough (experiment 55):** CatBoost with proper pandas DataFrame and string-typed categorical columns enables CatBoost's native ordered target encoding, yielding a +0.006 AUROC jump over the previous best. This is because CatBoost's internal categorical handling is far superior to label encoding for tree-based models.
 
