@@ -62,7 +62,7 @@ def build_dataframe(X, feature_names):
     raw_path = Path.home() / '.cache/re-admit/diabetic_data.csv'
     raw = pd.read_csv(raw_path, usecols=[
         'diag_1', 'diag_2', 'diag_3', 'discharge_disposition_id',
-        'medical_specialty'
+        'medical_specialty', 'patient_nbr', 'age'
     ])
 
     # ICD-9 disease group features
@@ -87,6 +87,14 @@ def build_dataframe(X, feature_names):
     le = LabelEncoder()
     df['medical_specialty'] = le.fit_transform(raw['medical_specialty'].fillna('?').astype(str))
     df['medical_specialty'] = df['medical_specialty'].astype(int).astype(str)
+
+    # Patient encounter count
+    patient_counts = raw['patient_nbr'].value_counts()
+    df['patient_encounter_count'] = raw['patient_nbr'].map(patient_counts).values
+
+    # Age numeric (midpoint of age ranges)
+    age_map = {'[0-10)': 5, '[10-20)': 15, '[20-30)': 25, '[30-40)': 35, '[40-50)': 45, '[50-60)': 55, '[60-70)': 65, '[70-80)': 75, '[80-90)': 85, '[90-100)': 95}
+    df['age_numeric'] = raw['age'].map(age_map).fillna(55).values
 
     del raw
     gc.collect()
@@ -172,6 +180,7 @@ if __name__ == "__main__":
             verbose=0,
             eval_metric='AUC',
             task_type='CPU',
+            boosting_type='Ordered',
         )
         model.fit(train_pool)
         y_pred_proba = model.predict_proba(val_pool)[:, 1]
