@@ -1,7 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 67b: Seed averaging — train CatBoost with 3 different seeds, average predictions.
+Experiment 68: CatBoost with Ordered boosting type.
+Ordered boosting reduces prediction shift (overfitting on gradient estimates).
 """
 
 import gc
@@ -21,7 +22,6 @@ from prepare import (
 from sklearn.metrics import roc_auc_score
 
 MODEL_SEED = RANDOM_SEED
-SEEDS = [42, 123, 777]
 
 
 def icd9_to_group(code_str):
@@ -133,7 +133,7 @@ if __name__ == "__main__":
     del X
     gc.collect()
 
-    print(f"[train] Model: CatBoost seed averaging ({len(SEEDS)} seeds: {SEEDS})")
+    print(f"[train] Model: CatBoost Ordered boosting")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -154,27 +154,21 @@ if __name__ == "__main__":
         train_pool = Pool(df_train, label=y_train, cat_features=cat_features)
         val_pool = Pool(df_val, cat_features=cat_features)
 
-        # Train with multiple seeds and average
-        seed_preds = []
-        for seed in SEEDS:
-            model = CatBoostClassifier(
-                iterations=4000,
-                depth=6,
-                learning_rate=0.02,
-                rsm=0.8,
-                l2_leaf_reg=1,
-                min_data_in_leaf=20,
-                random_seed=seed,
-                verbose=0,
-                eval_metric='AUC',
-                task_type='CPU',
-            )
-            model.fit(train_pool)
-            seed_preds.append(model.predict_proba(val_pool)[:, 1])
-            del model
-            gc.collect()
-
-        y_pred_proba = np.mean(seed_preds, axis=0)
+        model = CatBoostClassifier(
+            iterations=4000,
+            depth=6,
+            learning_rate=0.02,
+            rsm=0.8,
+            l2_leaf_reg=1,
+            min_data_in_leaf=20,
+            random_seed=MODEL_SEED,
+            verbose=0,
+            eval_metric='AUC',
+            task_type='CPU',
+            boosting_type='Ordered',
+        )
+        model.fit(train_pool)
+        y_pred_proba = model.predict_proba(val_pool)[:, 1]
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
@@ -184,10 +178,9 @@ if __name__ == "__main__":
         print(f"  Fold {fold_i+1}/{len(fold_indices)}: "
               f"AUROC={fold_metrics['auroc']:.4f} "
               f"F1={fold_metrics['f1']:.4f} "
-              f"Acc={fold_metrics['accuracy']:.4f}"
-              f" (individual: {[f'{roc_auc_score(y_val, p):.4f}' for p in seed_preds]})")
+              f"Acc={fold_metrics['accuracy']:.4f}")
 
-        del train_pool, val_pool, df_train, df_val, seed_preds
+        del model, train_pool, val_pool, df_train, df_val
         gc.collect()
 
     result = {}
