@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Current best: CatBoost with native categorical handling + interactions + medical_specialty.
-AUROC 0.6877 (single model) / 0.6879 (ensemble with GBM).
+Experiment 67: Stacking meta-learner with CatBoost + GBM base models.
+Generate OOF predictions from both models, then train LR on stacked features.
 """
 
 import gc
@@ -20,6 +20,8 @@ from prepare import (
     evaluate,
 )
 from sklearn.metrics import roc_auc_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import GradientBoostingClassifier
 
 MODEL_SEED = RANDOM_SEED
 
@@ -140,7 +142,7 @@ if __name__ == "__main__":
     del X
     gc.collect()
 
-    print(f"[train] Model: CatBoost + interactions + medical_specialty")
+    print(f"[train] Model: Stacking (CatBoost + GBM) -> LR meta-learner")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -151,9 +153,18 @@ if __name__ == "__main__":
     all_y_true = []
     all_y_proba = []
 
+    # Get numeric-only version for GBM (can't use string categoricals)
+    numeric_cols = [c for c in df.columns if c not in cat_features]
+    # For GBM, convert cat cols back to numeric
+    df_numeric = df.copy()
+    for col in cat_features:
+        if col in df_numeric.columns:
+            df_numeric[col] = pd.to_numeric(df_numeric[col], errors='coerce').fillna(0)
+
     for fold_i, (train_idx, val_idx) in enumerate(fold_indices):
         from catboost import CatBoostClassifier, Pool
 
+        # --- CatBoost base model ---
         df_train = df.iloc[train_idx]
         df_val = df.iloc[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
@@ -161,7 +172,7 @@ if __name__ == "__main__":
         train_pool = Pool(df_train, label=y_train, cat_features=cat_features)
         val_pool = Pool(df_val, cat_features=cat_features)
 
-        model = CatBoostClassifier(
+        cb_model = CatBoostClassifier(
             iterations=4000,
             depth=6,
             learning_rate=0.02,
@@ -173,8 +184,77 @@ if __name__ == "__main__":
             eval_metric='AUC',
             task_type='CPU',
         )
-        model.fit(train_pool)
-        y_pred_proba = model.predict_proba(val_pool)[:, 1]
+        cb_model.fit(train_pool)
+        cb_val_pred = cb_model.predict_proba(val_pool)[:, 1]
+
+        # CatBoost OOF for inner stacking: use inner 3-fold CV on training data
+        from sklearn.model_selection import StratifiedKFold
+        inner_skf = StratifiedKFold(n_splits=3, shuffle=True, random_state=MODEL_SEED)
+        cb_oof_train = np.zeros(len(train_idx))
+
+        for inner_train, inner_val in inner_skf.split(df_train, y_train):
+            inner_train_pool = Pool(df_train.iloc[inner_train], label=y_train[inner_train], cat_features=cat_features)
+            inner_val_pool = Pool(df_train.iloc[inner_val], cat_features=cat_features)
+            inner_cb = CatBoostClassifier(
+                iterations=2000,
+                depth=6,
+                learning_rate=0.03,
+                rsm=0.8,
+                l2_leaf_reg=1,
+                min_data_in_leaf=20,
+                random_seed=MODEL_SEED,
+                verbose=0,
+                task_type='CPU',
+            )
+            inner_cb.fit(inner_train_pool)
+            cb_oof_train[inner_val] = inner_cb.predict_proba(inner_val_pool)[:, 1]
+            del inner_cb, inner_train_pool, inner_val_pool
+            gc.collect()
+
+        del cb_model, train_pool, val_pool
+        gc.collect()
+
+        # --- GBM base model ---
+        X_train_num = df_numeric.iloc[train_idx].values.astype(np.float64)
+        X_val_num = df_numeric.iloc[val_idx].values.astype(np.float64)
+
+        gbm_model = GradientBoostingClassifier(
+            n_estimators=2000,
+            max_depth=5,
+            learning_rate=0.01,
+            subsample=0.8,
+            max_features=0.8,
+            random_state=MODEL_SEED,
+        )
+        gbm_model.fit(X_train_num, y_train)
+        gbm_val_pred = gbm_model.predict_proba(X_val_num)[:, 1]
+
+        # GBM OOF for inner stacking
+        gbm_oof_train = np.zeros(len(train_idx))
+        for inner_train, inner_val in inner_skf.split(X_train_num, y_train):
+            inner_gbm = GradientBoostingClassifier(
+                n_estimators=1000,
+                max_depth=5,
+                learning_rate=0.02,
+                subsample=0.8,
+                max_features=0.8,
+                random_state=MODEL_SEED,
+            )
+            inner_gbm.fit(X_train_num[inner_train], y_train[inner_train])
+            gbm_oof_train[inner_val] = inner_gbm.predict_proba(X_train_num[inner_val])[:, 1]
+            del inner_gbm
+            gc.collect()
+
+        del gbm_model
+        gc.collect()
+
+        # --- Meta-learner (LR) ---
+        meta_train = np.column_stack([cb_oof_train, gbm_oof_train])
+        meta_val = np.column_stack([cb_val_pred, gbm_val_pred])
+
+        lr_meta = LogisticRegression(C=1.0, random_state=MODEL_SEED, max_iter=1000)
+        lr_meta.fit(meta_train, y_train)
+        y_pred_proba = lr_meta.predict_proba(meta_val)[:, 1]
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
@@ -184,9 +264,11 @@ if __name__ == "__main__":
         print(f"  Fold {fold_i+1}/{len(fold_indices)}: "
               f"AUROC={fold_metrics['auroc']:.4f} "
               f"F1={fold_metrics['f1']:.4f} "
-              f"Acc={fold_metrics['accuracy']:.4f}")
+              f"Acc={fold_metrics['accuracy']:.4f}"
+              f" (CB={roc_auc_score(y_val, cb_val_pred):.4f}"
+              f" GBM={roc_auc_score(y_val, gbm_val_pred):.4f})")
 
-        del model, train_pool, val_pool, df_train, df_val
+        del df_train, df_val, meta_train, meta_val
         gc.collect()
 
     result = {}
