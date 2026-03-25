@@ -1,9 +1,9 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 64: LightGBM with native categorical handling.
-LightGBM's leaf-wise growth + exclusive feature bundling may find different patterns than CatBoost.
-Then blend with CatBoost for ensemble gain.
+Experiment 65: CatBoost best config + richer feature engineering.
+Adding: age interactions, discharge grouping, A1C-medication interactions,
+prior visit ratios, and more granular medication features.
 """
 
 import gc
@@ -37,27 +37,27 @@ def icd9_to_group(code_str):
     except ValueError:
         return 8
     if 250 <= num < 251:
-        return 0  # Diabetes
+        return 0
     elif (390 <= num <= 459) or (785 <= num < 786):
-        return 1  # Circulatory
+        return 1
     elif (460 <= num <= 519) or (786 <= num < 787):
-        return 2  # Respiratory
+        return 2
     elif (520 <= num <= 579) or (787 <= num < 788):
-        return 3  # Digestive
+        return 3
     elif 800 <= num <= 999:
-        return 4  # Injury
+        return 4
     elif 710 <= num <= 739:
-        return 5  # Musculoskeletal
+        return 5
     elif (580 <= num <= 629) or (788 <= num < 789):
-        return 6  # Genitourinary
+        return 6
     elif 140 <= num <= 239:
-        return 7  # Neoplasms
+        return 7
     else:
-        return 8  # Other
+        return 8
 
 
 def build_dataframe(X, feature_names):
-    """Build DataFrame with extra features. Returns (df, cat_col_indices)."""
+    """Build DataFrame with rich features for CatBoost."""
     df = pd.DataFrame(X, columns=feature_names)
 
     raw_path = Path.home() / '.cache/re-admit/diabetic_data.csv'
@@ -66,29 +66,40 @@ def build_dataframe(X, feature_names):
         'medical_specialty'
     ])
 
-    df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int)
-    df['diag_group_2'] = raw['diag_2'].apply(icd9_to_group).astype(int)
-    df['diag_group_3'] = raw['diag_3'].apply(icd9_to_group).astype(int)
+    # ICD-9 disease groups
+    df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
+    df['diag_group_2'] = raw['diag_2'].apply(icd9_to_group).astype(int).astype(str)
+    df['diag_group_3'] = raw['diag_3'].apply(icd9_to_group).astype(int).astype(str)
 
+    # Dead/hospice flag
     dead_codes = {11, 13, 14, 19, 20, 21}
-    df['is_dead'] = raw['discharge_disposition_id'].isin(dead_codes).astype(int)
-    df['is_diab_primary'] = (df['diag_group_1'] == 0).astype(int)
-    df['n_diab_diag'] = (
-        (df['diag_group_1'] == 0).astype(int) +
-        (df['diag_group_2'] == 0).astype(int) +
-        (df['diag_group_3'] == 0).astype(int)
-    )
+    df['is_dead'] = raw['discharge_disposition_id'].isin(dead_codes).astype(int).astype(str)
 
+    # Diabetes flags
+    df['is_diab_primary'] = (df['diag_group_1'] == '0').astype(int).astype(str)
+    df['n_diab_diag'] = (
+        (df['diag_group_1'] == '0').astype(int) +
+        (df['diag_group_2'] == '0').astype(int) +
+        (df['diag_group_3'] == '0').astype(int)
+    ).astype(str)
+
+    # Medical specialty
     from sklearn.preprocessing import LabelEncoder
     le = LabelEncoder()
     df['medical_specialty'] = le.fit_transform(raw['medical_specialty'].fillna('?').astype(str))
+    df['medical_specialty'] = df['medical_specialty'].astype(int).astype(str)
 
+    del raw
+    gc.collect()
+
+    # --- Interaction features (numeric) ---
     df['inpatient_x_meds'] = df['number_inpatient'] * df['num_medications']
     df['inpatient_x_time'] = df['number_inpatient'] * df['time_in_hospital']
     df['meds_x_time'] = df['num_medications'] * df['time_in_hospital']
     df['emergency_x_inpatient'] = df['number_emergency'] * df['number_inpatient']
     df['num_total_visits'] = df['number_outpatient'] + df['number_emergency'] + df['number_inpatient']
 
+    # Active medications count
     med_cols = ['metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
                 'glimepiride', 'acetohexamide', 'glipizide', 'glyburide',
                 'tolbutamide', 'pioglitazone', 'rosiglitazone', 'acarbose',
@@ -98,42 +109,66 @@ def build_dataframe(X, feature_names):
                 'metformin-pioglitazone']
     df['n_active_meds'] = sum((df[col] != 0).astype(int) for col in med_cols if col in df.columns)
 
-    del raw
-    gc.collect()
+    # --- NEW features for exp 65 ---
+    # Ratio features (with small epsilon to avoid div by zero)
+    eps = 0.001
+    df['meds_per_day'] = df['num_medications'] / (df['time_in_hospital'] + eps)
+    df['labs_per_day'] = df['num_lab_procedures'] / (df['time_in_hospital'] + eps)
+    df['procs_per_day'] = df['num_procedures'] / (df['time_in_hospital'] + eps)
 
-    # LightGBM categorical columns (as 'category' dtype)
-    cat_col_names = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
-                     'admission_source_id', 'diag_1', 'diag_2', 'diag_3',
-                     'max_glu_serum', 'A1Cresult',
-                     'metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
-                     'glimepiride', 'acetohexamide', 'glipizide', 'glyburide',
-                     'tolbutamide', 'pioglitazone', 'rosiglitazone', 'acarbose',
-                     'miglitol', 'troglitazone', 'tolazamide', 'insulin',
-                     'glyburide-metformin', 'glipizide-metformin',
-                     'glimepiride-pioglitazone', 'metformin-rosiglitazone',
-                     'metformin-pioglitazone', 'change', 'diabetesMed',
-                     'diag_group_1', 'diag_group_2', 'diag_group_3',
-                     'is_dead', 'is_diab_primary', 'n_diab_diag', 'medical_specialty']
+    # Visit history intensity
+    df['inpatient_ratio'] = df['number_inpatient'] / (df['num_total_visits'] + eps)
 
-    for col in cat_col_names:
+    # Age × number_inpatient (older patients with prior admissions = higher risk)
+    df['age_x_inpatient'] = df['age'] * df['number_inpatient']
+    df['age_x_meds'] = df['age'] * df['num_medications']
+
+    # Number of diagnoses × number_inpatient
+    df['ndiag_x_inpatient'] = df['number_diagnoses'] * df['number_inpatient']
+
+    # Discharge disposition grouping (categorical)
+    # 1=home, 2=short-term hospital, 3=SNF, 5=other facility, 6=home health
+    discharge_val = df['discharge_disposition_id'].astype(float)
+    df['discharge_group'] = pd.cut(discharge_val,
+        bins=[-1, 1, 2, 5, 10, 30],
+        labels=['home', 'hospital', 'facility', 'other', 'special']
+    ).astype(str)
+
+    # Categoricals for CatBoost
+    cat_cols = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
+                'admission_source_id', 'diag_1', 'diag_2', 'diag_3',
+                'max_glu_serum', 'A1Cresult',
+                'metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
+                'glimepiride', 'acetohexamide', 'glipizide', 'glyburide',
+                'tolbutamide', 'pioglitazone', 'rosiglitazone', 'acarbose',
+                'miglitol', 'troglitazone', 'tolazamide', 'insulin',
+                'glyburide-metformin', 'glipizide-metformin',
+                'glimepiride-pioglitazone', 'metformin-rosiglitazone',
+                'metformin-pioglitazone', 'change', 'diabetesMed']
+    for col in cat_cols:
         if col in df.columns:
-            df[col] = df[col].astype(int).astype('category')
+            df[col] = df[col].astype(int).astype(str)
 
-    return df, cat_col_names
+    added_cat = ['diag_group_1', 'diag_group_2', 'diag_group_3',
+                 'is_dead', 'is_diab_primary', 'n_diab_diag',
+                 'medical_specialty', 'discharge_group']
+    all_cat = [c for c in cat_cols if c in df.columns] + added_cat
+
+    return df, all_cat
 
 
 if __name__ == "__main__":
     print(f"[train] Loading data...")
     X, y, feature_names, fold_indices = preprocess_data()
 
-    print(f"[train] Building DataFrame...")
-    df, cat_cols = build_dataframe(X, feature_names)
+    print(f"[train] Building DataFrame with rich features...")
+    df, cat_features = build_dataframe(X, feature_names)
 
     del X
     gc.collect()
 
-    print(f"[train] Model: LightGBM with native categorical handling")
-    print(f"[train] Features: {df.shape[1]} ({len(cat_cols)} categorical)")
+    print(f"[train] Model: CatBoost + rich features")
+    print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
     tracemalloc.start()
@@ -144,35 +179,29 @@ if __name__ == "__main__":
     all_y_proba = []
 
     for fold_i, (train_idx, val_idx) in enumerate(fold_indices):
-        import lightgbm as lgb
+        from catboost import CatBoostClassifier, Pool
 
         df_train = df.iloc[train_idx]
         df_val = df.iloc[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
 
-        train_data = lgb.Dataset(df_train, label=y_train, categorical_feature=cat_cols)
+        train_pool = Pool(df_train, label=y_train, cat_features=cat_features)
+        val_pool = Pool(df_val, cat_features=cat_features)
 
-        params = {
-            'objective': 'binary',
-            'metric': 'auc',
-            'num_leaves': 63,
-            'max_depth': -1,
-            'learning_rate': 0.02,
-            'n_estimators': 3000,
-            'subsample': 0.8,
-            'colsample_bytree': 0.8,
-            'min_child_samples': 20,
-            'reg_lambda': 1,
-            'random_state': MODEL_SEED,
-            'verbose': -1,
-        }
-
-        model = lgb.train(
-            params,
-            train_data,
-            num_boost_round=3000,
+        model = CatBoostClassifier(
+            iterations=4000,
+            depth=6,
+            learning_rate=0.02,
+            rsm=0.8,
+            l2_leaf_reg=1,
+            min_data_in_leaf=20,
+            random_seed=MODEL_SEED,
+            verbose=0,
+            eval_metric='AUC',
+            task_type='CPU',
         )
-        y_pred_proba = model.predict(df_val)
+        model.fit(train_pool)
+        y_pred_proba = model.predict_proba(val_pool)[:, 1]
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
@@ -184,7 +213,7 @@ if __name__ == "__main__":
               f"F1={fold_metrics['f1']:.4f} "
               f"Acc={fold_metrics['accuracy']:.4f}")
 
-        del model, train_data, df_train, df_val
+        del model, train_pool, val_pool, df_train, df_val
         gc.collect()
 
     result = {}
