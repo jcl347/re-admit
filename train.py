@@ -1,9 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 65: CatBoost best config + richer feature engineering.
-Adding: age interactions, discharge grouping, A1C-medication interactions,
-prior visit ratios, and more granular medication features.
+Current best: CatBoost with native categorical handling + interactions + medical_specialty.
+AUROC 0.6877 (single model) / 0.6879 (ensemble with GBM).
 """
 
 import gc
@@ -37,27 +36,27 @@ def icd9_to_group(code_str):
     except ValueError:
         return 8
     if 250 <= num < 251:
-        return 0
+        return 0  # Diabetes
     elif (390 <= num <= 459) or (785 <= num < 786):
-        return 1
+        return 1  # Circulatory
     elif (460 <= num <= 519) or (786 <= num < 787):
-        return 2
+        return 2  # Respiratory
     elif (520 <= num <= 579) or (787 <= num < 788):
-        return 3
+        return 3  # Digestive
     elif 800 <= num <= 999:
-        return 4
+        return 4  # Injury
     elif 710 <= num <= 739:
-        return 5
+        return 5  # Musculoskeletal
     elif (580 <= num <= 629) or (788 <= num < 789):
-        return 6
+        return 6  # Genitourinary
     elif 140 <= num <= 239:
-        return 7
+        return 7  # Neoplasms
     else:
-        return 8
+        return 8  # Other
 
 
 def build_dataframe(X, feature_names):
-    """Build DataFrame with rich features for CatBoost."""
+    """Build a pandas DataFrame with proper dtypes for CatBoost."""
     df = pd.DataFrame(X, columns=feature_names)
 
     raw_path = Path.home() / '.cache/re-admit/diabetic_data.csv'
@@ -66,7 +65,7 @@ def build_dataframe(X, feature_names):
         'medical_specialty'
     ])
 
-    # ICD-9 disease groups
+    # ICD-9 disease group features
     df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
     df['diag_group_2'] = raw['diag_2'].apply(icd9_to_group).astype(int).astype(str)
     df['diag_group_3'] = raw['diag_3'].apply(icd9_to_group).astype(int).astype(str)
@@ -92,7 +91,7 @@ def build_dataframe(X, feature_names):
     del raw
     gc.collect()
 
-    # --- Interaction features (numeric) ---
+    # Interaction features (numeric)
     df['inpatient_x_meds'] = df['number_inpatient'] * df['num_medications']
     df['inpatient_x_time'] = df['number_inpatient'] * df['time_in_hospital']
     df['meds_x_time'] = df['num_medications'] * df['time_in_hospital']
@@ -109,32 +108,7 @@ def build_dataframe(X, feature_names):
                 'metformin-pioglitazone']
     df['n_active_meds'] = sum((df[col] != 0).astype(int) for col in med_cols if col in df.columns)
 
-    # --- NEW features for exp 65 ---
-    # Ratio features (with small epsilon to avoid div by zero)
-    eps = 0.001
-    df['meds_per_day'] = df['num_medications'] / (df['time_in_hospital'] + eps)
-    df['labs_per_day'] = df['num_lab_procedures'] / (df['time_in_hospital'] + eps)
-    df['procs_per_day'] = df['num_procedures'] / (df['time_in_hospital'] + eps)
-
-    # Visit history intensity
-    df['inpatient_ratio'] = df['number_inpatient'] / (df['num_total_visits'] + eps)
-
-    # Age × number_inpatient (older patients with prior admissions = higher risk)
-    df['age_x_inpatient'] = df['age'] * df['number_inpatient']
-    df['age_x_meds'] = df['age'] * df['num_medications']
-
-    # Number of diagnoses × number_inpatient
-    df['ndiag_x_inpatient'] = df['number_diagnoses'] * df['number_inpatient']
-
-    # Discharge disposition grouping (categorical)
-    # 1=home, 2=short-term hospital, 3=SNF, 5=other facility, 6=home health
-    discharge_val = df['discharge_disposition_id'].astype(float)
-    df['discharge_group'] = pd.cut(discharge_val,
-        bins=[-1, 1, 2, 5, 10, 30],
-        labels=['home', 'hospital', 'facility', 'other', 'special']
-    ).astype(str)
-
-    # Categoricals for CatBoost
+    # Categorical columns for CatBoost
     cat_cols = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
                 'admission_source_id', 'diag_1', 'diag_2', 'diag_3',
                 'max_glu_serum', 'A1Cresult',
@@ -150,8 +124,7 @@ def build_dataframe(X, feature_names):
             df[col] = df[col].astype(int).astype(str)
 
     added_cat = ['diag_group_1', 'diag_group_2', 'diag_group_3',
-                 'is_dead', 'is_diab_primary', 'n_diab_diag',
-                 'medical_specialty', 'discharge_group']
+                 'is_dead', 'is_diab_primary', 'n_diab_diag', 'medical_specialty']
     all_cat = [c for c in cat_cols if c in df.columns] + added_cat
 
     return df, all_cat
@@ -161,13 +134,13 @@ if __name__ == "__main__":
     print(f"[train] Loading data...")
     X, y, feature_names, fold_indices = preprocess_data()
 
-    print(f"[train] Building DataFrame with rich features...")
+    print(f"[train] Building DataFrame with features...")
     df, cat_features = build_dataframe(X, feature_names)
 
     del X
     gc.collect()
 
-    print(f"[train] Model: CatBoost + rich features")
+    print(f"[train] Model: CatBoost + interactions + medical_specialty")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 

@@ -2,7 +2,7 @@
 
 ## Goal
 Reach AUROC 0.70 on the UCI Diabetes 130-US Hospitals 30-day readmission prediction task.
-Current best: **AUROC 0.6814** (sklearn GradientBoosting, n_est=2000, lr=0.01, depth=5).
+Current best: **AUROC 0.6879** (CatBoost + GBM ensemble with native categorical handling + ICD-9 groups + interactions + medical_specialty).
 
 ## Key Paper: Strack et al. (2014)
 **Citation:** Strack, B., DeShazo, J.P., Gennings, C., et al. "Impact of HbA1c Measurement on Hospital Readmission Rates." *BioMed Research International*, 2014, 781670.
@@ -54,17 +54,43 @@ Since prepare.py is READ-ONLY, we must do ICD-9 grouping inside `train_and_predi
 4. **num_medications × time_in_hospital** — key interaction
 5. **Medication change features** — "change" column + individual med changes
 
-## What We've Tried (42 experiments)
-- sklearn GBM is consistently best on this preprocessing (AUROC 0.6814)
-- XGBoost, LightGBM, CatBoost all worse with current label-encoded features
+## What We've Tried (65 experiments)
+
+### Phase 1: sklearn GBM baseline (experiments 1-54)
+- sklearn GBM is consistently best with label-encoded features (AUROC 0.6814)
+- XGBoost, LightGBM, CatBoost all worse with label-encoded features
 - HistGradientBoosting systematically worse (histogram binning loses info)
 - Ensembles provide marginal gains (+0.0002) at high cost
 - Raw target encoding and interaction features HURT (added noise)
 - SMOTE hurts, class weighting hurts for AUROC optimization
 - Early stopping with validation_fraction hurts (reduces training data)
+- ICD-9 grouping as EXTRA features + is_dead flag → 0.6818
+
+### Phase 2: CatBoost breakthrough (experiments 55-65)
+- **CatBoost with native categorical handling via pandas DataFrame** → 0.6859 (+0.0041!)
+  - Key insight: previous CatBoost experiments used numpy float arrays, bypassing CatBoost's ordered target encoding
+  - Converting label-encoded columns to string type enables CatBoost's native categorical handling
+  - diag_1/2/3 as categoricals ARE valuable despite 700+ cardinality (CatBoost handles this well)
+- Adding interaction features (inpatient×meds, inpatient×time, etc.) + medical_specialty → 0.6874
+- CatBoost 4000 iters, lr=0.02, l2=1, min_leaf=20 → 0.6877
+- CatBoost + GBM ensemble (0.6/0.4 blend) → **0.6879** (current best)
+- LightGBM with native categoricals → 0.641 (terrible — LightGBM handles high-cardinality categoricals poorly)
+- Lossguide grow policy → 0.658 (massive overfitting)
+- Richer features (ratios, age interactions, discharge groups) → 0.6877 (no gain from extra features)
+- 5000 iterations got killed by OOM twice; gc.collect() fixed it but didn't improve over 4000 iters
+
+### Key Learnings
+1. **CatBoost's native categorical handling is the single biggest improvement** — +0.006 over any other approach
+2. **Keep diag_1/2/3 as categoricals** — removing them drops AUROC by 0.002
+3. **Interaction features help modestly** (+0.001): number_inpatient × num_medications, × time_in_hospital
+4. **medical_specialty from raw data** provides useful signal despite 49% missing
+5. **Ensemble of CatBoost + GBM** gives tiny gain (+0.0002) over CatBoost alone
+6. **Ratio/age features don't help** — CatBoost can learn these interactions itself
+7. **LightGBM is not competitive** on this dataset with these features
 
 ## Next Steps (Priority Order)
-1. **ICD-9 disease grouping** — map diag_1/2/3 to 9 Strack categories in train.py
-2. **Dead patient handling** — flag discharge_disposition for died/hospice patients
-3. **Combine grouping + GBM** — should unlock the 0.68 → 0.70 gap
-4. **Try CatBoost with grouped features** — CatBoost handles categoricals natively
+1. **Stacking meta-learner** — use CatBoost + GBM + XGBoost OOF predictions as features for LR
+2. **Feature selection** — remove noisy features that may be hurting CatBoost
+3. **CatBoost with symmetric tree + ordered boosting tuning** — try different boosting types
+4. **Patient-level deduplication** — some patients appear multiple times; use patient_nbr for grouping
+5. **Target: AUROC 0.70** — need +0.012 from current 0.6879
