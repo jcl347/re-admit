@@ -1,8 +1,7 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 67: Stacking meta-learner with CatBoost + GBM base models.
-Generate OOF predictions from both models, then train LR on stacked features.
+Experiment 67b: Seed averaging — train CatBoost with 3 different seeds, average predictions.
 """
 
 import gc
@@ -20,10 +19,9 @@ from prepare import (
     evaluate,
 )
 from sklearn.metrics import roc_auc_score
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import GradientBoostingClassifier
 
 MODEL_SEED = RANDOM_SEED
+SEEDS = [42, 123, 777]
 
 
 def icd9_to_group(code_str):
@@ -38,23 +36,23 @@ def icd9_to_group(code_str):
     except ValueError:
         return 8
     if 250 <= num < 251:
-        return 0  # Diabetes
+        return 0
     elif (390 <= num <= 459) or (785 <= num < 786):
-        return 1  # Circulatory
+        return 1
     elif (460 <= num <= 519) or (786 <= num < 787):
-        return 2  # Respiratory
+        return 2
     elif (520 <= num <= 579) or (787 <= num < 788):
-        return 3  # Digestive
+        return 3
     elif 800 <= num <= 999:
-        return 4  # Injury
+        return 4
     elif 710 <= num <= 739:
-        return 5  # Musculoskeletal
+        return 5
     elif (580 <= num <= 629) or (788 <= num < 789):
-        return 6  # Genitourinary
+        return 6
     elif 140 <= num <= 239:
-        return 7  # Neoplasms
+        return 7
     else:
-        return 8  # Other
+        return 8
 
 
 def build_dataframe(X, feature_names):
@@ -67,16 +65,13 @@ def build_dataframe(X, feature_names):
         'medical_specialty'
     ])
 
-    # ICD-9 disease group features
     df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
     df['diag_group_2'] = raw['diag_2'].apply(icd9_to_group).astype(int).astype(str)
     df['diag_group_3'] = raw['diag_3'].apply(icd9_to_group).astype(int).astype(str)
 
-    # Dead/hospice flag
     dead_codes = {11, 13, 14, 19, 20, 21}
     df['is_dead'] = raw['discharge_disposition_id'].isin(dead_codes).astype(int).astype(str)
 
-    # Diabetes flags
     df['is_diab_primary'] = (df['diag_group_1'] == '0').astype(int).astype(str)
     df['n_diab_diag'] = (
         (df['diag_group_1'] == '0').astype(int) +
@@ -84,7 +79,6 @@ def build_dataframe(X, feature_names):
         (df['diag_group_3'] == '0').astype(int)
     ).astype(str)
 
-    # Medical specialty
     from sklearn.preprocessing import LabelEncoder
     le = LabelEncoder()
     df['medical_specialty'] = le.fit_transform(raw['medical_specialty'].fillna('?').astype(str))
@@ -93,14 +87,12 @@ def build_dataframe(X, feature_names):
     del raw
     gc.collect()
 
-    # Interaction features (numeric)
     df['inpatient_x_meds'] = df['number_inpatient'] * df['num_medications']
     df['inpatient_x_time'] = df['number_inpatient'] * df['time_in_hospital']
     df['meds_x_time'] = df['num_medications'] * df['time_in_hospital']
     df['emergency_x_inpatient'] = df['number_emergency'] * df['number_inpatient']
     df['num_total_visits'] = df['number_outpatient'] + df['number_emergency'] + df['number_inpatient']
 
-    # Active medications count
     med_cols = ['metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
                 'glimepiride', 'acetohexamide', 'glipizide', 'glyburide',
                 'tolbutamide', 'pioglitazone', 'rosiglitazone', 'acarbose',
@@ -110,7 +102,6 @@ def build_dataframe(X, feature_names):
                 'metformin-pioglitazone']
     df['n_active_meds'] = sum((df[col] != 0).astype(int) for col in med_cols if col in df.columns)
 
-    # Categorical columns for CatBoost
     cat_cols = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
                 'admission_source_id', 'diag_1', 'diag_2', 'diag_3',
                 'max_glu_serum', 'A1Cresult',
@@ -142,7 +133,7 @@ if __name__ == "__main__":
     del X
     gc.collect()
 
-    print(f"[train] Model: Stacking (CatBoost + GBM) -> LR meta-learner")
+    print(f"[train] Model: CatBoost seed averaging ({len(SEEDS)} seeds: {SEEDS})")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -153,18 +144,9 @@ if __name__ == "__main__":
     all_y_true = []
     all_y_proba = []
 
-    # Get numeric-only version for GBM (can't use string categoricals)
-    numeric_cols = [c for c in df.columns if c not in cat_features]
-    # For GBM, convert cat cols back to numeric
-    df_numeric = df.copy()
-    for col in cat_features:
-        if col in df_numeric.columns:
-            df_numeric[col] = pd.to_numeric(df_numeric[col], errors='coerce').fillna(0)
-
     for fold_i, (train_idx, val_idx) in enumerate(fold_indices):
         from catboost import CatBoostClassifier, Pool
 
-        # --- CatBoost base model ---
         df_train = df.iloc[train_idx]
         df_val = df.iloc[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
@@ -172,89 +154,27 @@ if __name__ == "__main__":
         train_pool = Pool(df_train, label=y_train, cat_features=cat_features)
         val_pool = Pool(df_val, cat_features=cat_features)
 
-        cb_model = CatBoostClassifier(
-            iterations=4000,
-            depth=6,
-            learning_rate=0.02,
-            rsm=0.8,
-            l2_leaf_reg=1,
-            min_data_in_leaf=20,
-            random_seed=MODEL_SEED,
-            verbose=0,
-            eval_metric='AUC',
-            task_type='CPU',
-        )
-        cb_model.fit(train_pool)
-        cb_val_pred = cb_model.predict_proba(val_pool)[:, 1]
-
-        # CatBoost OOF for inner stacking: use inner 3-fold CV on training data
-        from sklearn.model_selection import StratifiedKFold
-        inner_skf = StratifiedKFold(n_splits=3, shuffle=True, random_state=MODEL_SEED)
-        cb_oof_train = np.zeros(len(train_idx))
-
-        for inner_train, inner_val in inner_skf.split(df_train, y_train):
-            inner_train_pool = Pool(df_train.iloc[inner_train], label=y_train[inner_train], cat_features=cat_features)
-            inner_val_pool = Pool(df_train.iloc[inner_val], cat_features=cat_features)
-            inner_cb = CatBoostClassifier(
-                iterations=2000,
+        # Train with multiple seeds and average
+        seed_preds = []
+        for seed in SEEDS:
+            model = CatBoostClassifier(
+                iterations=4000,
                 depth=6,
-                learning_rate=0.03,
+                learning_rate=0.02,
                 rsm=0.8,
                 l2_leaf_reg=1,
                 min_data_in_leaf=20,
-                random_seed=MODEL_SEED,
+                random_seed=seed,
                 verbose=0,
+                eval_metric='AUC',
                 task_type='CPU',
             )
-            inner_cb.fit(inner_train_pool)
-            cb_oof_train[inner_val] = inner_cb.predict_proba(inner_val_pool)[:, 1]
-            del inner_cb, inner_train_pool, inner_val_pool
+            model.fit(train_pool)
+            seed_preds.append(model.predict_proba(val_pool)[:, 1])
+            del model
             gc.collect()
 
-        del cb_model, train_pool, val_pool
-        gc.collect()
-
-        # --- GBM base model ---
-        X_train_num = df_numeric.iloc[train_idx].values.astype(np.float64)
-        X_val_num = df_numeric.iloc[val_idx].values.astype(np.float64)
-
-        gbm_model = GradientBoostingClassifier(
-            n_estimators=2000,
-            max_depth=5,
-            learning_rate=0.01,
-            subsample=0.8,
-            max_features=0.8,
-            random_state=MODEL_SEED,
-        )
-        gbm_model.fit(X_train_num, y_train)
-        gbm_val_pred = gbm_model.predict_proba(X_val_num)[:, 1]
-
-        # GBM OOF for inner stacking
-        gbm_oof_train = np.zeros(len(train_idx))
-        for inner_train, inner_val in inner_skf.split(X_train_num, y_train):
-            inner_gbm = GradientBoostingClassifier(
-                n_estimators=1000,
-                max_depth=5,
-                learning_rate=0.02,
-                subsample=0.8,
-                max_features=0.8,
-                random_state=MODEL_SEED,
-            )
-            inner_gbm.fit(X_train_num[inner_train], y_train[inner_train])
-            gbm_oof_train[inner_val] = inner_gbm.predict_proba(X_train_num[inner_val])[:, 1]
-            del inner_gbm
-            gc.collect()
-
-        del gbm_model
-        gc.collect()
-
-        # --- Meta-learner (LR) ---
-        meta_train = np.column_stack([cb_oof_train, gbm_oof_train])
-        meta_val = np.column_stack([cb_val_pred, gbm_val_pred])
-
-        lr_meta = LogisticRegression(C=1.0, random_state=MODEL_SEED, max_iter=1000)
-        lr_meta.fit(meta_train, y_train)
-        y_pred_proba = lr_meta.predict_proba(meta_val)[:, 1]
+        y_pred_proba = np.mean(seed_preds, axis=0)
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
@@ -265,10 +185,9 @@ if __name__ == "__main__":
               f"AUROC={fold_metrics['auroc']:.4f} "
               f"F1={fold_metrics['f1']:.4f} "
               f"Acc={fold_metrics['accuracy']:.4f}"
-              f" (CB={roc_auc_score(y_val, cb_val_pred):.4f}"
-              f" GBM={roc_auc_score(y_val, gbm_val_pred):.4f})")
+              f" (individual: {[f'{roc_auc_score(y_val, p):.4f}' for p in seed_preds]})")
 
-        del df_train, df_val, meta_train, meta_val
+        del train_pool, val_pool, df_train, df_val, seed_preds
         gc.collect()
 
     result = {}
