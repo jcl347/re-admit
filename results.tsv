@@ -58,3 +58,4 @@ e52108c	0.000000	0.000000	0.000000	0.0	0.0	crash	exp67: stacking CB+GBM->LR meta
 888a0d3	0.686600	0.062400	0.889400	90.0	2900.0	discard	exp67b: CatBoost seed avg 3 seeds (42/123/777) - killed after fold 1 (too slow 2.5h est)
 556e2b0	0.680900	0.069500	0.889600	90.0	3000.0	discard	exp68: CatBoost Ordered boosting - worse and much slower (fold 1 only: 0.6809 vs 0.6856)
 3746a5d	0.000000	0.000000	0.000000	0.0	0.0	crash	exp69: CatBoost lr=0.01 6000 iters l2=3 bagging_temp=0.5 - killed after fold 3 (OOM). ~same as baseline
+30fc0ad	0.688461	0.048128	0.889344	162.7	2353.0	keep	exp70: CatBoost+XGBoost 0.7/0.3 blend - NEW BEST 0.6885! +0.0008 over prev best
