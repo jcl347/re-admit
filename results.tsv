@@ -57,3 +57,4 @@ a326ea2	0.687700	0.036000	0.888600	90.0	500.0	discard	CatBoost + richer features
 e52108c	0.000000	0.000000	0.000000	0.0	0.0	crash	exp67: stacking CB+GBM->LR meta-learner - killed (inner CV too slow >1.5h)
 888a0d3	0.686600	0.062400	0.889400	90.0	2900.0	discard	exp67b: CatBoost seed avg 3 seeds (42/123/777) - killed after fold 1 (too slow 2.5h est)
 556e2b0	0.680900	0.069500	0.889600	90.0	3000.0	discard	exp68: CatBoost Ordered boosting - worse and much slower (fold 1 only: 0.6809 vs 0.6856)
+3746a5d	0.000000	0.000000	0.000000	0.0	0.0	crash	exp69: CatBoost lr=0.01 6000 iters l2=3 bagging_temp=0.5 - killed after fold 3 (OOM). ~same as baseline

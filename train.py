@@ -1,7 +1,9 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 69: CatBoost with lower lr (0.01), more iters (6000), bagging_temperature=0.5.
+Experiment 70: CatBoost + XGBoost ensemble blend.
+CatBoost uses native categoricals. XGBoost uses numeric features.
+Blend 0.7/0.3 (CatBoost dominant since it's stronger).
 """
 
 import gc
@@ -139,7 +141,13 @@ if __name__ == "__main__":
     del X
     gc.collect()
 
-    print(f"[train] Model: CatBoost + interactions + medical_specialty")
+    # Build numeric version for XGBoost
+    df_numeric = df.copy()
+    for col in cat_features:
+        if col in df_numeric.columns:
+            df_numeric[col] = pd.to_numeric(df_numeric[col], errors='coerce').fillna(0)
+
+    print(f"[train] Model: CatBoost + XGBoost ensemble (0.7/0.3 blend)")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -152,41 +160,71 @@ if __name__ == "__main__":
 
     for fold_i, (train_idx, val_idx) in enumerate(fold_indices):
         from catboost import CatBoostClassifier, Pool
+        from xgboost import XGBClassifier
 
         df_train = df.iloc[train_idx]
         df_val = df.iloc[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
 
+        # CatBoost with native categoricals
         train_pool = Pool(df_train, label=y_train, cat_features=cat_features)
         val_pool = Pool(df_val, cat_features=cat_features)
 
-        model = CatBoostClassifier(
-            iterations=6000,
+        cb_model = CatBoostClassifier(
+            iterations=4000,
             depth=6,
-            learning_rate=0.01,
+            learning_rate=0.02,
             rsm=0.8,
-            l2_leaf_reg=3,
+            l2_leaf_reg=1,
             min_data_in_leaf=20,
             random_seed=MODEL_SEED,
             verbose=0,
             eval_metric='AUC',
             task_type='CPU',
-            bagging_temperature=0.5,
         )
-        model.fit(train_pool)
-        y_pred_proba = model.predict_proba(val_pool)[:, 1]
+        cb_model.fit(train_pool)
+        cb_pred = cb_model.predict_proba(val_pool)[:, 1]
+
+        del cb_model, train_pool, val_pool
+        gc.collect()
+
+        # XGBoost on numeric features
+        X_train_num = df_numeric.iloc[train_idx].values.astype(np.float64)
+        X_val_num = df_numeric.iloc[val_idx].values.astype(np.float64)
+
+        xgb_model = XGBClassifier(
+            n_estimators=2000,
+            max_depth=5,
+            learning_rate=0.01,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_alpha=0.1,
+            reg_lambda=1.0,
+            random_state=MODEL_SEED,
+            eval_metric='auc',
+            verbosity=0,
+        )
+        xgb_model.fit(X_train_num, y_train)
+        xgb_pred = xgb_model.predict_proba(X_val_num)[:, 1]
+
+        del xgb_model
+        gc.collect()
+
+        # Blend
+        y_pred_proba = 0.7 * cb_pred + 0.3 * xgb_pred
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
         all_y_true.extend(y_val.tolist())
         all_y_proba.extend(y_pred_proba.tolist())
 
+        cb_auroc = roc_auc_score(y_val, cb_pred)
+        xgb_auroc = roc_auc_score(y_val, xgb_pred)
         print(f"  Fold {fold_i+1}/{len(fold_indices)}: "
               f"AUROC={fold_metrics['auroc']:.4f} "
-              f"F1={fold_metrics['f1']:.4f} "
-              f"Acc={fold_metrics['accuracy']:.4f}")
+              f"(CB={cb_auroc:.4f} XGB={xgb_auroc:.4f})")
 
-        del model, train_pool, val_pool, df_train, df_val
+        del df_train, df_val
         gc.collect()
 
     result = {}
