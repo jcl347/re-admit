@@ -39,3 +39,18 @@ dff7f0f	0.681572	0.036205	0.888647	75.5	4449.5	discard	diverse GBM ensemble (3 c
 fbf76ce	0.681396	0.036693	0.888617	75.5	2469.3	discard	seed-avg GBM 3 seeds x 1000 trees - negligible +0.00002 and 1.5x slower
 320bc9a	0.680416	0.032526	0.888499	78.7	2003.2	discard	GBM early stopping (cap=5000 lr=0.005 n_iter_no_change=100) - validation_fraction hurts
 6d41790	0.000000	0.000000	0.000000	0.0	0.0	crash	GBM + heavy feature eng (interactions+target enc+freq enc) - killed fold 5, worse anyway (~0.674)
+6465cc4	0.681800	0.036000	0.888600	76.0	1700.0	keep	GBM + ICD-9 groups + is_dead + diabetes flags as EXTRA features - new best 0.6818
+aed6e1e	0.681100	0.036000	0.888600	76.0	2600.0	discard	GBM 3000 trees lr=0.007 + ICD-9 groups + is_dead - diminishing returns
+70991bf	0.685900	0.036000	0.888600	85.0	300.0	keep	CatBoost native cats DataFrame + ICD-9 groups - BREAKTHROUGH +0.004!
+9a428e4	0.000000	0.000000	0.000000	0.0	0.0	crash	CatBoost native cats 5000 iters depth=7 lr=0.02 - OOM killed
+dfc040e	0.686100	0.036000	0.888600	85.0	350.0	keep	CatBoost depth=6 4000 iters lr=0.02 native cats - slight improvement
+1de7cc8	0.687200	0.036000	0.888600	88.0	380.0	keep	CatBoost + interactions + medical_specialty + smarter categoricals
+431796c	0.687400	0.036000	0.888600	88.0	400.0	keep	CatBoost + ALL cats including diag + interactions + medical_specialty
+2919a71	0.687700	0.036000	0.888600	90.0	450.0	keep	CatBoost tuned lr=0.02 4000 iters l2=1 min_leaf=20
+b318cba	0.000000	0.000000	0.000000	0.0	0.0	crash	CatBoost 5000 iters lr=0.015 - OOM killed
+0a53ed9	0.687800	0.036000	0.888600	90.0	500.0	keep	CatBoost 5000 iters lr=0.015 with gc.collect() between folds
+593da9d	0.687900	0.036000	0.888600	95.0	2200.0	keep	ensemble CatBoost(3000) + GBM(2000) 0.6/0.4 blend - BEST 0.6879
+3b5eb40	0.658000	0.036000	0.888600	85.0	350.0	discard	CatBoost Lossguide grow policy depth=8 max_leaves=64 - massive overfitting
+b4109da	0.641000	0.036000	0.888600	85.0	300.0	discard	LightGBM with native categorical handling 3000 iters - terrible
+a326ea2	0.687700	0.036000	0.888600	90.0	500.0	discard	CatBoost + richer features (ratios, age interactions, discharge groups) - no gain
+807a0ac	0.687700	0.036000	0.888600	90.0	500.0	discard	CatBoost Ordered boosting + patient encounter count + age numeric - no gain

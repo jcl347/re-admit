@@ -8,5 +8,5 @@ dist/
 build/
 .eggs/
 *.ipynb_checkpoints/
-results.tsv
+# results.tsv is now tracked to preserve experiment history
 catboost_info/
