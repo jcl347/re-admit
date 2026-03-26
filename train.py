@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 74: CB(l2=3, bagging_temp=0.3) + XGB(3000/d6) blend 0.75/0.25.
-More regularized CatBoost to reduce overfitting.
+Experiment 75: CB(l2=5, bagging_temp=0.5, random_strength=0.5) + XGB(3000/d6) 0.75/0.25.
+Even more regularized CatBoost.
 """
 
 import gc
@@ -174,13 +174,14 @@ if __name__ == "__main__":
             depth=6,
             learning_rate=0.02,
             rsm=0.8,
-            l2_leaf_reg=3,
+            l2_leaf_reg=5,
             min_data_in_leaf=20,
             random_seed=MODEL_SEED,
             verbose=0,
             eval_metric='AUC',
             task_type='CPU',
-            bagging_temperature=0.3,
+            bagging_temperature=0.5,
+            random_strength=0.5,
         )
         cb_model.fit(train_pool)
         cb_pred = cb_model.predict_proba(val_pool)[:, 1]
