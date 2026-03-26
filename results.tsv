@@ -77,3 +77,4 @@ c0c0f71	0.689181	0.062870	0.889315	165.6	2227.2	discard	exp85b: age_numeric feat
 f5d8bb3	0.689200	0.000000	0.000000	162.8	0.0	discard	exp86: CB langevin+score_function=Cosine - no effect vs exp82, killed after fold 2
 0c62b2e	0.689565	0.062106	0.889089	162.8	2385.6	discard	exp87: CB leaf_estimation_iterations=10 - identical to exp82, no effect
 a04d1c7	0.689448	0.062599	0.889157	162.7	2369.3	discard	exp88: diverse XGB seed=123 hist max_bin=512 - marginally worse than exp82
+e04fa26	0.689742	0.059020	0.889187	163.1	3873.1	keep	exp89: 2xCB+XGB blend (0.50/0.30/0.20) - NEW BEST 0.6897! CB diversity helps
