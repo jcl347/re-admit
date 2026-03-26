@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 83: CB langevin with lower diffusion_temp=5000 + XGB blend.
-Less Langevin noise to see if the sweet spot is lower.
+Experiment 82: CB with langevin=True + diffusion_temperature + XGB blend.
+Stochastic gradient Langevin boosting adds noise for regularization.
 """
 
 import gc
@@ -183,7 +183,7 @@ if __name__ == "__main__":
             bagging_temperature=0.5,
             random_strength=0.5,
             langevin=True,
-            diffusion_temperature=5000,
+            diffusion_temperature=10000,
         )
         cb_model.fit(train_pool)
         cb_pred = cb_model.predict_proba(val_pool)[:, 1]
