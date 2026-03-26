@@ -74,3 +74,4 @@ ab0f20a	0.000000	0.000000	0.000000	0.0	0.0	crash	exp80: 2-seed CB avg + XGB blen
 1bf0a91	0.689542	0.061826	0.889099	162.8	2348.5	discard	exp83: CB langevin diff_temp=5000 + XGB - tied with exp82, diff_temp=10000 marginally better
 d8b78cf	0.689279	0.067448	0.889462	162.8	2247.7	discard	exp84: CB posterior_sampling + XGB - worse than exp82 langevin with tuned diff_temp
 c0c0f71	0.689181	0.062870	0.889315	165.6	2227.2	discard	exp85b: age_numeric feature - hurts (CatBoost already handles age brackets)
+f5d8bb3	0.689200	0.000000	0.000000	162.8	0.0	discard	exp86: CB langevin+score_function=Cosine - no effect vs exp82, killed after fold 2

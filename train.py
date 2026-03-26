@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 86: CB langevin + score_function=Cosine + XGB blend.
-Cosine split scoring may find better splits than default L2.
+Experiment 87: CB langevin + leaf_estimation_iterations=10 + XGB blend.
+More Newton iterations per leaf for better leaf value estimates.
 """
 
 import gc
@@ -184,7 +184,7 @@ if __name__ == "__main__":
             random_strength=0.5,
             langevin=True,
             diffusion_temperature=10000,
-            score_function='Cosine',
+            leaf_estimation_iterations=10,
         )
         cb_model.fit(train_pool)
         cb_pred = cb_model.predict_proba(val_pool)[:, 1]
