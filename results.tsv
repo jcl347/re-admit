@@ -66,3 +66,4 @@ e52108c	0.000000	0.000000	0.000000	0.0	0.0	crash	exp67: stacking CB+GBM->LR meta
 9461087	0.689402	0.051517	0.889413	162.7	2396.4	keep	exp75: CB(l2=5,bag_temp=0.5,rand_str=0.5)+XGB 0.75/0.25 - NEW BEST 0.6894!
 77193a6	0.689288	0.050199	0.889315	162.7	2226.6	discard	exp76: CB(l2=7,bag_temp=0.7,rand_str=1.0)+XGB - too much reg, slightly worse
 fa7ba7f	0.687984	0.000000	0.000000	162.7	722.6	discard	exp77: CB one_hot_max_size=10 - one-hot hurts, target encoding better for all cats
+0fc8a95	0.689402	0.051517	0.889413	162.7	2335.8	discard	exp78: CB min_leaf=30 model_size_reg=0.5 - identical to exp75, no effect

@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 78: CB(min_leaf=30, model_size_reg=0.5) + XGB blend.
-Slightly more leaf regularization + model complexity penalty.
+Experiment 79: Best CB + tuned XGBoost (deeper, more regularized) blend.
+XGBoost with max_depth=7, stronger reg, more estimators.
 """
 
 import gc
@@ -175,14 +175,13 @@ if __name__ == "__main__":
             learning_rate=0.02,
             rsm=0.8,
             l2_leaf_reg=5,
-            min_data_in_leaf=30,
+            min_data_in_leaf=20,
             random_seed=MODEL_SEED,
             verbose=0,
             eval_metric='AUC',
             task_type='CPU',
             bagging_temperature=0.5,
             random_strength=0.5,
-            model_size_reg=0.5,
         )
         cb_model.fit(train_pool)
         cb_pred = cb_model.predict_proba(val_pool)[:, 1]
@@ -195,14 +194,15 @@ if __name__ == "__main__":
         X_val_num = df_numeric.iloc[val_idx].values.astype(np.float64)
 
         xgb_model = XGBClassifier(
-            n_estimators=3000,
-            max_depth=6,
-            learning_rate=0.01,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            reg_alpha=0.1,
-            reg_lambda=1.0,
-            min_child_weight=5,
+            n_estimators=4000,
+            max_depth=5,
+            learning_rate=0.008,
+            subsample=0.7,
+            colsample_bytree=0.7,
+            reg_alpha=0.5,
+            reg_lambda=2.0,
+            min_child_weight=10,
+            gamma=0.1,
             random_state=MODEL_SEED,
             eval_metric='auc',
             verbosity=0,
