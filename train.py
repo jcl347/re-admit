@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 80: 2-seed CatBoost averaging + XGBoost blend (0.75/0.25).
-Seed averaging reduces CatBoost variance without changing architecture.
+Experiment 81: CB depth=7 with heavy regularization + XGB blend.
+Deeper tree to capture more complex interactions, compensated by stronger reg.
 """
 
 import gc
@@ -169,30 +169,24 @@ if __name__ == "__main__":
         train_pool = Pool(df_train, label=y_train, cat_features=cat_features)
         val_pool = Pool(df_val, cat_features=cat_features)
 
-        # 2-seed CatBoost averaging
-        cb_preds = []
-        for seed in [42, 123]:
-            cb_model = CatBoostClassifier(
-                iterations=4000,
-                depth=6,
-                learning_rate=0.02,
-                rsm=0.8,
-                l2_leaf_reg=5,
-                min_data_in_leaf=20,
-                random_seed=seed,
-                verbose=0,
-                eval_metric='AUC',
-                task_type='CPU',
-                bagging_temperature=0.5,
-                random_strength=0.5,
-            )
-            cb_model.fit(train_pool)
-            cb_preds.append(cb_model.predict_proba(val_pool)[:, 1])
-            del cb_model
-            gc.collect()
-        cb_pred = np.mean(cb_preds, axis=0)
+        cb_model = CatBoostClassifier(
+            iterations=3000,
+            depth=7,
+            learning_rate=0.02,
+            rsm=0.7,
+            l2_leaf_reg=10,
+            min_data_in_leaf=30,
+            random_seed=MODEL_SEED,
+            verbose=0,
+            eval_metric='AUC',
+            task_type='CPU',
+            bagging_temperature=0.7,
+            random_strength=1.0,
+        )
+        cb_model.fit(train_pool)
+        cb_pred = cb_model.predict_proba(val_pool)[:, 1]
 
-        del train_pool, val_pool
+        del cb_model, train_pool, val_pool
         gc.collect()
 
         # XGBoost on numeric features
