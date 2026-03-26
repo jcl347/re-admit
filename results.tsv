@@ -63,3 +63,4 @@ e52108c	0.000000	0.000000	0.000000	0.0	0.0	crash	exp67: stacking CB+GBM->LR meta
 5dc47cb	0.688416	0.048128	0.889344	162.7	2424.2	discard	exp72: CB+XGB 0.65/0.35 blend - slightly worse than 0.7/0.3. Optimal weight ~0.75
 70b6759	0.689026	0.051498	0.889315	162.7	2482.0	keep	exp73: CB+XGB(3000/d6) 0.75/0.25 - NEW BEST 0.6890! +0.0005 over exp70
 8a6e21f	0.689187	0.049996	0.889216	162.7	2462.8	keep	exp74: CB(l2=3,bag_temp=0.3)+XGB(3000/d6) 0.75/0.25 - NEW BEST 0.6892!
+9461087	0.689402	0.051517	0.889413	162.7	2396.4	keep	exp75: CB(l2=5,bag_temp=0.5,rand_str=0.5)+XGB 0.75/0.25 - NEW BEST 0.6894!
