@@ -70,3 +70,4 @@ fa7ba7f	0.687984	0.000000	0.000000	162.7	722.6	discard	exp77: CB one_hot_max_siz
 e71b1e6	0.689091	0.048748	0.889325	162.7	2253.6	discard	exp79: best CB + tuned XGB(4000/d5/lr=0.008) - XGB better alone but blend slightly worse
 ab0f20a	0.000000	0.000000	0.000000	0.0	0.0	crash	exp80: 2-seed CB avg + XGB blend - OOM after fold 3. CB avg helped (+0.0005) but too heavy
 7bc10b6	0.689179	0.047298	0.889226	162.7	1955.2	discard	exp81: CB depth=7 heavy reg + XGB blend - deeper tree worse even with more reg
+07e4b12	0.689565	0.062106	0.889089	162.8	2317.1	keep	exp82: CB langevin=True diff_temp=10000 + XGB 0.75/0.25 - NEW BEST 0.6896!
