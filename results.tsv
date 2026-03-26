@@ -72,3 +72,4 @@ ab0f20a	0.000000	0.000000	0.000000	0.0	0.0	crash	exp80: 2-seed CB avg + XGB blen
 7bc10b6	0.689179	0.047298	0.889226	162.7	1955.2	discard	exp81: CB depth=7 heavy reg + XGB blend - deeper tree worse even with more reg
 07e4b12	0.689565	0.062106	0.889089	162.8	2317.1	keep	exp82: CB langevin=True diff_temp=10000 + XGB 0.75/0.25 - NEW BEST 0.6896!
 1bf0a91	0.689542	0.061826	0.889099	162.8	2348.5	discard	exp83: CB langevin diff_temp=5000 + XGB - tied with exp82, diff_temp=10000 marginally better
+d8b78cf	0.689279	0.067448	0.889462	162.8	2247.7	discard	exp84: CB posterior_sampling + XGB - worse than exp82 langevin with tuned diff_temp

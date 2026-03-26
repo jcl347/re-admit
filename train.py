@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 84: CB with posterior_sampling=True + langevin + XGB blend.
-Bayesian posterior sampling for improved uncertainty estimation.
+Experiment 85b: Best CB+XGB + age numeric feature only.
+patient_encounter_count removed (data leakage - counts future encounters).
 """
 
 import gc
@@ -62,8 +62,16 @@ def build_dataframe(X, feature_names):
     raw_path = Path.home() / '.cache/re-admit/diabetic_data.csv'
     raw = pd.read_csv(raw_path, usecols=[
         'diag_1', 'diag_2', 'diag_3', 'discharge_disposition_id',
-        'medical_specialty'
+        'medical_specialty', 'age'
     ])
+
+    # Age as numeric midpoint (legitimate feature, no leakage)
+    age_map = {
+        '[0-10)': 5, '[10-20)': 15, '[20-30)': 25, '[30-40)': 35,
+        '[40-50)': 45, '[50-60)': 55, '[60-70)': 65, '[70-80)': 75,
+        '[80-90)': 85, '[90-100)': 95
+    }
+    df['age_numeric'] = raw['age'].map(age_map).fillna(65).values
 
     # ICD-9 disease group features
     df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
@@ -182,7 +190,8 @@ if __name__ == "__main__":
             task_type='CPU',
             bagging_temperature=0.5,
             random_strength=0.5,
-            posterior_sampling=True,
+            langevin=True,
+            diffusion_temperature=10000,
         )
         cb_model.fit(train_pool)
         cb_pred = cb_model.predict_proba(val_pool)[:, 1]
