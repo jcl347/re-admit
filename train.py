@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 87: CB langevin + leaf_estimation_iterations=10 + XGB blend.
-More Newton iterations per leaf for better leaf value estimates.
+Experiment 88: Best CB + diverse XGB (different seed, hist method) blend.
+Use different seed for XGBoost to maximize model diversity.
 """
 
 import gc
@@ -184,7 +184,6 @@ if __name__ == "__main__":
             random_strength=0.5,
             langevin=True,
             diffusion_temperature=10000,
-            leaf_estimation_iterations=10,
         )
         cb_model.fit(train_pool)
         cb_pred = cb_model.predict_proba(val_pool)[:, 1]
@@ -205,7 +204,9 @@ if __name__ == "__main__":
             reg_alpha=0.1,
             reg_lambda=1.0,
             min_child_weight=5,
-            random_state=MODEL_SEED,
+            random_state=123,  # Different seed from CatBoost for diversity
+            tree_method='hist',
+            max_bin=512,
             eval_metric='auc',
             verbosity=0,
         )
