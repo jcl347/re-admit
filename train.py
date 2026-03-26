@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 76: CB(l2=7, bagging_temp=0.7, random_strength=1.0) + XGB(3000/d6) 0.75/0.25.
-Aggressive CatBoost regularization.
+Experiment 77: CB with one_hot_max_size=10 + XGB blend.
+Force one-hot for low-cardinality cats, keep target encoding for high-cardinality.
 """
 
 import gc
@@ -174,14 +174,15 @@ if __name__ == "__main__":
             depth=6,
             learning_rate=0.02,
             rsm=0.8,
-            l2_leaf_reg=7,
+            l2_leaf_reg=5,
             min_data_in_leaf=20,
             random_seed=MODEL_SEED,
             verbose=0,
             eval_metric='AUC',
             task_type='CPU',
-            bagging_temperature=0.7,
-            random_strength=1.0,
+            bagging_temperature=0.5,
+            random_strength=0.5,
+            one_hot_max_size=10,
         )
         cb_model.fit(train_pool)
         cb_pred = cb_model.predict_proba(val_pool)[:, 1]
