@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 81: CB depth=7 with heavy regularization + XGB blend.
-Deeper tree to capture more complex interactions, compensated by stronger reg.
+Experiment 82: CB with langevin=True + diffusion_temperature + XGB blend.
+Stochastic gradient Langevin boosting adds noise for regularization.
 """
 
 import gc
@@ -170,18 +170,20 @@ if __name__ == "__main__":
         val_pool = Pool(df_val, cat_features=cat_features)
 
         cb_model = CatBoostClassifier(
-            iterations=3000,
-            depth=7,
+            iterations=4000,
+            depth=6,
             learning_rate=0.02,
-            rsm=0.7,
-            l2_leaf_reg=10,
-            min_data_in_leaf=30,
+            rsm=0.8,
+            l2_leaf_reg=5,
+            min_data_in_leaf=20,
             random_seed=MODEL_SEED,
             verbose=0,
             eval_metric='AUC',
             task_type='CPU',
-            bagging_temperature=0.7,
-            random_strength=1.0,
+            bagging_temperature=0.5,
+            random_strength=0.5,
+            langevin=True,
+            diffusion_temperature=10000,
         )
         cb_model.fit(train_pool)
         cb_pred = cb_model.predict_proba(val_pool)[:, 1]
