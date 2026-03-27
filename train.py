@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 89: Two CatBoost models (different configs) + XGBoost blend.
-CB1: langevin (current best), CB2: no langevin, different seed. Diversity.
+Experiment 94: CB(langevin) + XGB(scale_pos_weight=3) 0.75/0.25 blend.
+XGBoost with class imbalance correction for different prediction distribution.
 """
 
 import gc
@@ -188,27 +188,7 @@ if __name__ == "__main__":
         cb_model.fit(train_pool)
         cb_pred = cb_model.predict_proba(val_pool)[:, 1]
 
-        del cb_model
-        gc.collect()
-
-        # Second CatBoost with different config for diversity
-        cb_model2 = CatBoostClassifier(
-            iterations=3000,
-            depth=6,
-            learning_rate=0.03,
-            rsm=0.7,
-            l2_leaf_reg=3,
-            min_data_in_leaf=25,
-            random_seed=123,
-            verbose=0,
-            eval_metric='AUC',
-            task_type='CPU',
-            bagging_temperature=0.3,
-        )
-        cb_model2.fit(train_pool)
-        cb_pred2 = cb_model2.predict_proba(val_pool)[:, 1]
-
-        del cb_model2, train_pool, val_pool
+        del cb_model, train_pool, val_pool
         gc.collect()
 
         # XGBoost on numeric features
@@ -224,6 +204,7 @@ if __name__ == "__main__":
             reg_alpha=0.1,
             reg_lambda=1.0,
             min_child_weight=5,
+            scale_pos_weight=3,
             random_state=MODEL_SEED,
             eval_metric='auc',
             verbosity=0,
@@ -234,8 +215,8 @@ if __name__ == "__main__":
         del xgb_model
         gc.collect()
 
-        # 3-model blend: CB1(langevin) 0.50 + CB2(no-langevin) 0.30 + XGB 0.20
-        y_pred_proba = 0.50 * cb_pred + 0.30 * cb_pred2 + 0.20 * xgb_pred
+        # Blend
+        y_pred_proba = 0.75 * cb_pred + 0.25 * xgb_pred
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
@@ -243,11 +224,10 @@ if __name__ == "__main__":
         all_y_proba.extend(y_pred_proba.tolist())
 
         cb_auroc = roc_auc_score(y_val, cb_pred)
-        cb2_auroc = roc_auc_score(y_val, cb_pred2)
         xgb_auroc = roc_auc_score(y_val, xgb_pred)
         print(f"  Fold {fold_i+1}/{len(fold_indices)}: "
               f"AUROC={fold_metrics['auroc']:.4f} "
-              f"(CB1={cb_auroc:.4f} CB2={cb2_auroc:.4f} XGB={xgb_auroc:.4f})")
+              f"(CB={cb_auroc:.4f} XGB={xgb_auroc:.4f})")
 
         del df_train, df_val
         gc.collect()
