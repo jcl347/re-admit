@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 90: 2xCB+XGB blend with 0.55/0.25/0.20 weights.
-More weight to CB1 (stronger model).
+Experiment 91: 2xCB+XGB with CB2 using SqrtBalanced class weights.
+Class weighting on CB2 for diversity in handling imbalance.
 """
 
 import gc
@@ -204,6 +204,7 @@ if __name__ == "__main__":
             eval_metric='AUC',
             task_type='CPU',
             bagging_temperature=0.3,
+            auto_class_weights='SqrtBalanced',
         )
         cb_model2.fit(train_pool)
         cb_pred2 = cb_model2.predict_proba(val_pool)[:, 1]
@@ -234,8 +235,8 @@ if __name__ == "__main__":
         del xgb_model
         gc.collect()
 
-        # 3-model blend: CB1(langevin) 0.55 + CB2(no-langevin) 0.25 + XGB 0.20
-        y_pred_proba = 0.55 * cb_pred + 0.25 * cb_pred2 + 0.20 * xgb_pred
+        # 3-model blend: CB1(langevin) 0.50 + CB2(no-langevin) 0.30 + XGB 0.20
+        y_pred_proba = 0.50 * cb_pred + 0.30 * cb_pred2 + 0.20 * xgb_pred
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
