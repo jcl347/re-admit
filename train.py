@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 89: Two CatBoost models (different configs) + XGBoost blend.
-CB1: langevin (current best), CB2: no langevin, different seed. Diversity.
+Experiment 95: Rank-based blending of 2xCB+XGB.
+Convert predictions to percentile ranks before blending — handles calibration diffs.
 """
 
 import gc
@@ -234,8 +234,13 @@ if __name__ == "__main__":
         del xgb_model
         gc.collect()
 
-        # 3-model blend: CB1(langevin) 0.50 + CB2(no-langevin) 0.30 + XGB 0.20
-        y_pred_proba = 0.50 * cb_pred + 0.30 * cb_pred2 + 0.20 * xgb_pred
+        # Rank-based blending: convert to percentile ranks, then weighted average
+        from scipy.stats import rankdata
+        n = len(cb_pred)
+        cb_rank = rankdata(cb_pred) / n
+        cb2_rank = rankdata(cb_pred2) / n
+        xgb_rank = rankdata(xgb_pred) / n
+        y_pred_proba = 0.50 * cb_rank + 0.30 * cb2_rank + 0.20 * xgb_rank
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
