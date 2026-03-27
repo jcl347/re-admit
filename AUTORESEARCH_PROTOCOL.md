@@ -168,7 +168,7 @@ The idea is that you are a completely autonomous researcher trying things out. I
 ### Published baselines to beat (validation/test scores only)
 | Model | Val AUROC | Eval Method | Source |
 |---|---|---|---|
-| **Our best (CatBoost+XGBoost)** | **0.6896** | **5-fold stratified CV** | **This project (83 experiments)** |
+| **Our best (2xCatBoost+XGBoost)** | **0.6897** | **5-fold stratified CV** | **This project (92 experiments)** |
 | XGBoost | 0.6812 | 80/20 holdout test | NHSJS (2023) |
 | XGBoost | 0.667 | 80/20 holdout test | Emi-Johnson & Nkrumah (2025), Cureus |
 | CatBoost | 0.6571 | 70/30 train/val split | Gandra (2024), IJHS (0.70 was TRAINING score) |

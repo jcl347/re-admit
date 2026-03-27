@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 92: 2xCB+XGB with CB2 depth=5 (shallower) for diversity.
-Shallower tree learns different splits than depth=6.
+Experiment 89: Two CatBoost models (different configs) + XGBoost blend.
+CB1: langevin (current best), CB2: no langevin, different seed. Diversity.
 """
 
 import gc
@@ -193,18 +193,17 @@ if __name__ == "__main__":
 
         # Second CatBoost with different config for diversity
         cb_model2 = CatBoostClassifier(
-            iterations=4000,
-            depth=5,
-            learning_rate=0.02,
-            rsm=0.8,
+            iterations=3000,
+            depth=6,
+            learning_rate=0.03,
+            rsm=0.7,
             l2_leaf_reg=3,
-            min_data_in_leaf=15,
+            min_data_in_leaf=25,
             random_seed=123,
             verbose=0,
             eval_metric='AUC',
             task_type='CPU',
-            langevin=True,
-            diffusion_temperature=10000,
+            bagging_temperature=0.3,
         )
         cb_model2.fit(train_pool)
         cb_pred2 = cb_model2.predict_proba(val_pool)[:, 1]
