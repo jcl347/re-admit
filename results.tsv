@@ -79,3 +79,4 @@ f5d8bb3	0.689200	0.000000	0.000000	162.8	0.0	discard	exp86: CB langevin+score_fu
 a04d1c7	0.689448	0.062599	0.889157	162.7	2369.3	discard	exp88: diverse XGB seed=123 hist max_bin=512 - marginally worse than exp82
 e04fa26	0.689742	0.059020	0.889187	163.1	3873.1	keep	exp89: 2xCB+XGB blend (0.50/0.30/0.20) - NEW BEST 0.6897! CB diversity helps
 c2fdfdf	0.689735	0.059993	0.889236	163.1	3855.3	discard	exp90: 2xCB+XGB 0.55/0.25/0.20 - identical to exp89, weight change no effect
+28cc5f2	0.688000	0.000000	0.000000	163.1	0.0	discard	exp91: CB2 SqrtBalanced class weights - hurts CB2 AUROC. Killed after fold 2
