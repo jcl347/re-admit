@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 93: 2xCB+XGB + high-risk ICD-9 binary flags.
-Binary flags for top clinically-relevant diagnosis codes (heart failure, MI, etc).
+Experiment 89: Two CatBoost models (different configs) + XGBoost blend.
+CB1: langevin (current best), CB2: no langevin, different seed. Diversity.
 """
 
 import gc
@@ -69,25 +69,6 @@ def build_dataframe(X, feature_names):
     df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
     df['diag_group_2'] = raw['diag_2'].apply(icd9_to_group).astype(int).astype(str)
     df['diag_group_3'] = raw['diag_3'].apply(icd9_to_group).astype(int).astype(str)
-
-    # High-risk ICD-9 binary flags (any of diag_1/2/3)
-    high_risk_codes = {
-        'hf': ['428'],           # Heart failure
-        'ihd': ['414'],          # Ischemic heart disease
-        'mi': ['410'],           # Acute MI
-        'pneum': ['486'],        # Pneumonia
-        'sepsis': ['38'],        # Septicemia
-        'arf': ['584'],          # Acute renal failure
-        'copd': ['491', '492'],  # COPD
-        'uti': ['599'],          # UTI
-        'comp': ['996', '997', '998', '999'],  # Complications of care
-    }
-    for name, codes in high_risk_codes.items():
-        has_code = False
-        for dcol in ['diag_1', 'diag_2', 'diag_3']:
-            raw_codes = raw[dcol].astype(str).str[:3]
-            has_code = has_code | raw_codes.isin(codes)
-        df[f'has_{name}'] = has_code.astype(int)
 
     # Dead/hospice flag
     dead_codes = {11, 13, 14, 19, 20, 21}

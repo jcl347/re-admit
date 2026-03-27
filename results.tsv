@@ -81,3 +81,4 @@ e04fa26	0.689742	0.059020	0.889187	163.1	3873.1	keep	exp89: 2xCB+XGB blend (0.50
 c2fdfdf	0.689735	0.059993	0.889236	163.1	3855.3	discard	exp90: 2xCB+XGB 0.55/0.25/0.20 - identical to exp89, weight change no effect
 28cc5f2	0.688000	0.000000	0.000000	163.1	0.0	discard	exp91: CB2 SqrtBalanced class weights - hurts CB2 AUROC. Killed after fold 2
 a50e53a	0.689722	0.063561	0.889197	163.1	4023.0	discard	exp92: CB2 depth=5 langevin - tied with exp89, no improvement from shallower tree
+6c39d99	0.688600	0.000000	0.000000	163.1	0.0	discard	exp93: ICD-9 binary flags (HF/MI/pneum/etc) - redundant with CB native cats, hurts
