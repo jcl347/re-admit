@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 96: Diagnosis combination pattern + discharge grouping + 2xCB+XGB.
-Creative features: diag_pattern (3 groups concatenated), discharge_group (meaningful grouping).
+Experiment 98: diag_group × admission_type categorical interaction + exp96 features.
+Clinical pattern: what condition + how admitted.
 """
 
 import gc
@@ -110,6 +110,11 @@ def build_dataframe(X, feature_names):
         df[['diag_group_1', 'diag_group_2', 'diag_group_3']].nunique(axis=1)
     )
 
+    # Primary diagnosis × admission type (clinical pathway pattern)
+    df['diag1_x_admit'] = df['diag_group_1'] + '_' + df['admission_type_id'].astype(int).astype(str)
+    # Primary diagnosis × discharge group (outcome pathway)
+    df['diag1_x_discharge'] = df['diag_group_1'] + '_' + df['discharge_group']
+
     del raw
     gc.collect()
 
@@ -147,7 +152,7 @@ def build_dataframe(X, feature_names):
 
     added_cat = ['diag_group_1', 'diag_group_2', 'diag_group_3',
                  'is_dead', 'is_diab_primary', 'n_diab_diag', 'medical_specialty',
-                 'diag_pattern', 'discharge_group']
+                 'diag_pattern', 'discharge_group', 'diag1_x_admit', 'diag1_x_discharge']
     all_cat = [c for c in cat_cols if c in df.columns] + added_cat
 
     return df, all_cat
