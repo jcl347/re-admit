@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 95: Rank-based blending of 2xCB+XGB.
-Convert predictions to percentile ranks before blending — handles calibration diffs.
+Experiment 96: Diagnosis combination pattern + discharge grouping + 2xCB+XGB.
+Creative features: diag_pattern (3 groups concatenated), discharge_group (meaningful grouping).
 """
 
 import gc
@@ -88,6 +88,28 @@ def build_dataframe(X, feature_names):
     df['medical_specialty'] = le.fit_transform(raw['medical_specialty'].fillna('?').astype(str))
     df['medical_specialty'] = df['medical_specialty'].astype(int).astype(str)
 
+    # Diagnosis combination pattern (e.g., "1_0_8" = Circulatory+Diabetes+Other)
+    df['diag_pattern'] = df['diag_group_1'] + '_' + df['diag_group_2'] + '_' + df['diag_group_3']
+
+    # Discharge disposition grouping (clinically meaningful groups)
+    # 1=home, 2=short-term hospital, 3=SNF, 5=other facility, 6=home health
+    # 7=AMA, 11/13/14/19/20/21=dead/hospice (already captured in is_dead)
+    discharge_map = {}
+    for c in range(30):
+        if c in {1}: discharge_map[c] = '0'       # Home
+        elif c in {6}: discharge_map[c] = '1'      # Home with home health
+        elif c in {2, 10, 16, 27}: discharge_map[c] = '2'  # Another hospital/facility
+        elif c in {3, 4, 5}: discharge_map[c] = '3'  # SNF/ICF/other facility
+        elif c in {7}: discharge_map[c] = '4'       # AMA (left against advice - high risk!)
+        elif c in {11, 13, 14, 19, 20, 21}: discharge_map[c] = '5'  # Dead/hospice
+        else: discharge_map[c] = '6'                # Other
+    df['discharge_group'] = raw['discharge_disposition_id'].map(discharge_map).fillna('6').astype(str)
+
+    # Number of unique diagnosis groups (diversity of conditions)
+    df['n_unique_diag_groups'] = (
+        df[['diag_group_1', 'diag_group_2', 'diag_group_3']].nunique(axis=1)
+    )
+
     del raw
     gc.collect()
 
@@ -124,7 +146,8 @@ def build_dataframe(X, feature_names):
             df[col] = df[col].astype(int).astype(str)
 
     added_cat = ['diag_group_1', 'diag_group_2', 'diag_group_3',
-                 'is_dead', 'is_diab_primary', 'n_diab_diag', 'medical_specialty']
+                 'is_dead', 'is_diab_primary', 'n_diab_diag', 'medical_specialty',
+                 'diag_pattern', 'discharge_group']
     all_cat = [c for c in cat_cols if c in df.columns] + added_cat
 
     return df, all_cat
@@ -234,13 +257,8 @@ if __name__ == "__main__":
         del xgb_model
         gc.collect()
 
-        # Rank-based blending: convert to percentile ranks, then weighted average
-        from scipy.stats import rankdata
-        n = len(cb_pred)
-        cb_rank = rankdata(cb_pred) / n
-        cb2_rank = rankdata(cb_pred2) / n
-        xgb_rank = rankdata(xgb_pred) / n
-        y_pred_proba = 0.50 * cb_rank + 0.30 * cb2_rank + 0.20 * xgb_rank
+        # 3-model blend: CB1(langevin) 0.50 + CB2(no-langevin) 0.30 + XGB 0.20
+        y_pred_proba = 0.50 * cb_pred + 0.30 * cb_pred2 + 0.20 * xgb_pred
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
