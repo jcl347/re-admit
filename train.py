@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 98: diag_group × admission_type categorical interaction + exp96 features.
-Clinical pattern: what condition + how admitted.
+Experiment 99: Even more categorical interactions on exp98 base.
+Add specialty×diag1, diag2×admit, insulin×diag1.
 """
 
 import gc
@@ -114,6 +114,10 @@ def build_dataframe(X, feature_names):
     df['diag1_x_admit'] = df['diag_group_1'] + '_' + df['admission_type_id'].astype(int).astype(str)
     # Primary diagnosis × discharge group (outcome pathway)
     df['diag1_x_discharge'] = df['diag_group_1'] + '_' + df['discharge_group']
+    # Medical specialty × primary diagnosis (who treats what)
+    df['spec_x_diag1'] = df['medical_specialty'] + '_' + df['diag_group_1']
+    # Secondary diagnosis × admission type
+    df['diag2_x_admit'] = df['diag_group_2'] + '_' + df['admission_type_id'].astype(int).astype(str)
 
     del raw
     gc.collect()
@@ -152,7 +156,8 @@ def build_dataframe(X, feature_names):
 
     added_cat = ['diag_group_1', 'diag_group_2', 'diag_group_3',
                  'is_dead', 'is_diab_primary', 'n_diab_diag', 'medical_specialty',
-                 'diag_pattern', 'discharge_group', 'diag1_x_admit', 'diag1_x_discharge']
+                 'diag_pattern', 'discharge_group', 'diag1_x_admit', 'diag1_x_discharge',
+                 'spec_x_diag1', 'diag2_x_admit']
     all_cat = [c for c in cat_cols if c in df.columns] + added_cat
 
     return df, all_cat
