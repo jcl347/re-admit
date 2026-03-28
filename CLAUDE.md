@@ -4,7 +4,7 @@
 
 ## Goal
 Reach AUROC 0.70 on the UCI Diabetes 130-US Hospitals 30-day readmission prediction task.
-Current best: **AUROC 0.6897** (2xCatBoost + XGBoost ensemble, 0.50/0.30/0.20 blend).
+Current best: **AUROC 0.6900** (2xCatBoost + XGBoost ensemble with diagnosis pattern + discharge grouping features).
 
 **Note:** Our current best already exceeds all high-confidence published results on this dataset. The 0.70 target is ambitious and may be near the ceiling for conventional ML on these features.
 
@@ -18,7 +18,7 @@ Current best: **AUROC 0.6897** (2xCatBoost + XGBoost ensemble, 0.50/0.30/0.20 bl
 
 | Paper | Best Model | Val AUROC | Eval Method | Confidence |
 |---|---|---|---|---|
-| **Our best** | **2xCatBoost + XGBoost** | **0.6897** | **5-fold stratified CV** | **encounter-level splits, fixed seed** |
+| **Our best** | **2xCatBoost + XGBoost** | **0.6900** | **5-fold stratified CV** | **encounter-level splits, fixed seed** |
 | NHSJS 2023 | XGBoost | 0.6812 | 80/20 holdout test | MEDIUM — student journal, clear methods |
 | Emi-Johnson & Nkrumah 2025 (Cureus) | XGBoost | 0.667 | 80/20 holdout test | HIGH — peer-reviewed, PMC indexed |
 | Gandra 2024 (IJHS) | CatBoost | 0.6571 | 70/30 train/val split | LOW — reported 0.70 was TRAINING score |
@@ -30,7 +30,7 @@ Current best: **AUROC 0.6897** (2xCatBoost + XGBoost ensemble, 0.50/0.30/0.20 bl
 - Emi-Johnson & Nkrumah (2025) did NOT test CatBoost. Their best was XGBoost at 0.667.
 - Liu et al. (2024) used patient-grouped k-fold CV, preventing data leakage from repeated patients. Their 0.64 is not directly comparable to encounter-level evaluations.
 - Papers claiming AUROC > 0.72 (e.g., Temple University LSTM at 0.79) use DIFFERENT datasets, not UCI 296.
-- **Our AUROC 0.6897 is the highest validated score reported on this dataset.**
+- **Our AUROC 0.6900 is the highest validated score reported on this dataset.**
 
 ## Key Paper: Strack et al. (2014)
 **Citation:** Strack, B., DeShazo, J.P., Gennings, C., et al. "Impact of HbA1c Measurement on Hospital Readmission Rates." *BioMed Research International*, 2014, 781670.
