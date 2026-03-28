@@ -85,3 +85,4 @@ a50e53a	0.689722	0.063561	0.889197	163.1	4023.0	discard	exp92: CB2 depth=5 lange
 95293d3	0.687400	0.000000	0.000000	162.7	0.0	discard	exp94: XGB scale_pos_weight=3 - class weighting hurts AUROC. Killed fold 1
 8f2c08e	0.689497	0.267079	0.552316	163.5	3905.2	discard	exp95: rank-based blending - marginally worse AUROC, models already well-calibrated
 d62d8ab	0.689993	0.061226	0.889482	171.5	3845.0	keep	exp96: diag_pattern + discharge_group features - NEW BEST 0.6900! Broke 0.69 barrier!
+ddc3e81	0.689570	0.060534	0.889374	185.4	3858.1	discard	exp97: ICD-9 freq encoding + admission risk + med intensity - adds noise, worse

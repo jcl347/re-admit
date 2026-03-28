@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 97: More creative features on exp96 base.
-Add ICD-9 frequency encoding, admission risk features, medication intensity.
+Experiment 96: Diagnosis combination pattern + discharge grouping + 2xCB+XGB.
+Creative features: diag_pattern (3 groups concatenated), discharge_group (meaningful grouping).
 """
 
 import gc
@@ -108,29 +108,6 @@ def build_dataframe(X, feature_names):
     # Number of unique diagnosis groups (diversity of conditions)
     df['n_unique_diag_groups'] = (
         df[['diag_group_1', 'diag_group_2', 'diag_group_3']].nunique(axis=1)
-    )
-
-    # ICD-9 frequency encoding (how common is each diagnosis code in the dataset)
-    raw_full = pd.read_csv(Path.home() / '.cache/re-admit/diabetic_data.csv',
-                           usecols=['diag_1', 'diag_2', 'diag_3'])
-    for i, dcol in enumerate(['diag_1', 'diag_2', 'diag_3'], 1):
-        code_freq = raw_full[dcol].astype(str).str[:3].value_counts(normalize=True)
-        df[f'diag_freq_{i}'] = raw_full[dcol].astype(str).str[:3].map(code_freq).fillna(0).values
-    del raw_full
-
-    # Admission source risk grouping
-    # 1=physician referral (low), 2=clinic referral, 7=emergency room (high risk!)
-    admission_risk = {1: 0, 2: 0, 3: 0, 4: 1, 5: 1, 6: 1, 7: 2, 8: 1, 9: 0, 10: 1}
-    df['admission_risk'] = df['admission_source_id'].astype(float).astype(int).map(admission_risk).fillna(1)
-
-    # Medication change intensity (how many individual meds were changed)
-    med_change_cols = ['metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
-                       'glimepiride', 'glipizide', 'glyburide', 'pioglitazone',
-                       'rosiglitazone', 'acarbose', 'insulin']
-    # In the label-encoded data, the "Up"/"Down" values indicate changes
-    # We count how many meds have non-"No"/"Steady" values (encoded as different ints)
-    df['med_change_intensity'] = sum(
-        (df[col].astype(float) > 0).astype(int) for col in med_change_cols if col in df.columns
     )
 
     del raw
