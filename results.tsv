@@ -90,3 +90,4 @@ cf7ae31	0.690179	0.061005	0.889374	177.1	4035.9	keep	exp98: diag1×admit_type + 
 f2f0dcc	0.688900	0.000000	0.000000	177.1	0.0	discard	exp99: too many cat interactions (spec×diag1, diag2×admit) - OOM + worse fold 1
 e5b42f1	0.690623	0.058309	0.889266	163.1	4721.8	keep	exp100: removed numeric interactions (CatBoost learns them) - NEW BEST 0.6906!
 3e30b28	0.690916	0.050821	0.889364	169.5	4549.7	keep	exp101: AutoGluon-style greedy ensemble CB1+CB2+XGB+ET - NEW BEST 0.6909!
+c329d48	0.689600	0.000000	0.000000	169.5	0.0	discard	exp102: 5-model + GBM - GBM gets weight 0 (too correlated). Killed (too slow)

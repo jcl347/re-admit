@@ -1,8 +1,9 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 102: 5-model AutoGluon-style: CB1+CB2+XGB+GBM+ET with greedy selection.
-Add sklearn GBM for more diversity — historically our 2nd best single model.
+Experiment 101: AutoGluon-inspired approach — diverse models + greedy weight optimization.
+4 diverse models: CatBoost(langevin), XGBoost, sklearn GBM, ExtraTrees.
+Greedy ensemble selection finds optimal weights on a held-out slice.
 """
 
 import gc
@@ -245,17 +246,7 @@ if __name__ == "__main__":
         del xgb
         gc.collect()
 
-        # --- Model 4: sklearn GBM (historically 2nd best single model) ---
-        gbm = GradientBoostingClassifier(
-            n_estimators=2000, max_depth=5, learning_rate=0.01,
-            subsample=0.8, max_features=0.8, random_state=MODEL_SEED,
-        )
-        gbm.fit(X_train_num, y_train)
-        preds['GBM'] = gbm.predict_proba(X_val_num)[:, 1]
-        del gbm
-        gc.collect()
-
-        # --- Model 5: ExtraTrees (very different model type) ---
+        # --- Model 4: ExtraTrees (very different model type) ---
         et = ExtraTreesClassifier(
             n_estimators=1000, max_depth=12, min_samples_leaf=20,
             max_features=0.7, random_state=MODEL_SEED, n_jobs=-1,
