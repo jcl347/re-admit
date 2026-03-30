@@ -1,8 +1,9 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 100: Remove numeric interaction features (CatBoost can learn them).
-Keep only the categorical interactions that actually help.
+Experiment 101: AutoGluon-inspired approach — diverse models + greedy weight optimization.
+4 diverse models: CatBoost(langevin), XGBoost, sklearn GBM, ExtraTrees.
+Greedy ensemble selection finds optimal weights on a held-out slice.
 """
 
 import gc
@@ -36,23 +37,23 @@ def icd9_to_group(code_str):
     except ValueError:
         return 8
     if 250 <= num < 251:
-        return 0  # Diabetes
+        return 0
     elif (390 <= num <= 459) or (785 <= num < 786):
-        return 1  # Circulatory
+        return 1
     elif (460 <= num <= 519) or (786 <= num < 787):
-        return 2  # Respiratory
+        return 2
     elif (520 <= num <= 579) or (787 <= num < 788):
-        return 3  # Digestive
+        return 3
     elif 800 <= num <= 999:
-        return 4  # Injury
+        return 4
     elif 710 <= num <= 739:
-        return 5  # Musculoskeletal
+        return 5
     elif (580 <= num <= 629) or (788 <= num < 789):
-        return 6  # Genitourinary
+        return 6
     elif 140 <= num <= 239:
-        return 7  # Neoplasms
+        return 7
     else:
-        return 8  # Other
+        return 8
 
 
 def build_dataframe(X, feature_names):
@@ -65,16 +66,13 @@ def build_dataframe(X, feature_names):
         'medical_specialty'
     ])
 
-    # ICD-9 disease group features
     df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
     df['diag_group_2'] = raw['diag_2'].apply(icd9_to_group).astype(int).astype(str)
     df['diag_group_3'] = raw['diag_3'].apply(icd9_to_group).astype(int).astype(str)
 
-    # Dead/hospice flag
     dead_codes = {11, 13, 14, 19, 20, 21}
     df['is_dead'] = raw['discharge_disposition_id'].isin(dead_codes).astype(int).astype(str)
 
-    # Diabetes flags
     df['is_diab_primary'] = (df['diag_group_1'] == '0').astype(int).astype(str)
     df['n_diab_diag'] = (
         (df['diag_group_1'] == '0').astype(int) +
@@ -82,46 +80,36 @@ def build_dataframe(X, feature_names):
         (df['diag_group_3'] == '0').astype(int)
     ).astype(str)
 
-    # Medical specialty
     from sklearn.preprocessing import LabelEncoder
     le = LabelEncoder()
     df['medical_specialty'] = le.fit_transform(raw['medical_specialty'].fillna('?').astype(str))
     df['medical_specialty'] = df['medical_specialty'].astype(int).astype(str)
 
-    # Diagnosis combination pattern (e.g., "1_0_8" = Circulatory+Diabetes+Other)
     df['diag_pattern'] = df['diag_group_1'] + '_' + df['diag_group_2'] + '_' + df['diag_group_3']
 
-    # Discharge disposition grouping (clinically meaningful groups)
-    # 1=home, 2=short-term hospital, 3=SNF, 5=other facility, 6=home health
-    # 7=AMA, 11/13/14/19/20/21=dead/hospice (already captured in is_dead)
     discharge_map = {}
     for c in range(30):
-        if c in {1}: discharge_map[c] = '0'       # Home
-        elif c in {6}: discharge_map[c] = '1'      # Home with home health
-        elif c in {2, 10, 16, 27}: discharge_map[c] = '2'  # Another hospital/facility
-        elif c in {3, 4, 5}: discharge_map[c] = '3'  # SNF/ICF/other facility
-        elif c in {7}: discharge_map[c] = '4'       # AMA (left against advice - high risk!)
-        elif c in {11, 13, 14, 19, 20, 21}: discharge_map[c] = '5'  # Dead/hospice
-        else: discharge_map[c] = '6'                # Other
+        if c in {1}: discharge_map[c] = '0'
+        elif c in {6}: discharge_map[c] = '1'
+        elif c in {2, 10, 16, 27}: discharge_map[c] = '2'
+        elif c in {3, 4, 5}: discharge_map[c] = '3'
+        elif c in {7}: discharge_map[c] = '4'
+        elif c in {11, 13, 14, 19, 20, 21}: discharge_map[c] = '5'
+        else: discharge_map[c] = '6'
     df['discharge_group'] = raw['discharge_disposition_id'].map(discharge_map).fillna('6').astype(str)
 
-    # Number of unique diagnosis groups (diversity of conditions)
     df['n_unique_diag_groups'] = (
         df[['diag_group_1', 'diag_group_2', 'diag_group_3']].nunique(axis=1)
     )
 
-    # Primary diagnosis × admission type (clinical pathway pattern)
     df['diag1_x_admit'] = df['diag_group_1'] + '_' + df['admission_type_id'].astype(int).astype(str)
-    # Primary diagnosis × discharge group (outcome pathway)
     df['diag1_x_discharge'] = df['diag_group_1'] + '_' + df['discharge_group']
 
     del raw
     gc.collect()
 
-    # Keep only total visits (useful for XGBoost which can't split on categoricals)
     df['num_total_visits'] = df['number_outpatient'] + df['number_emergency'] + df['number_inpatient']
 
-    # Categorical columns for CatBoost
     cat_cols = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
                 'admission_source_id', 'diag_1', 'diag_2', 'diag_3',
                 'max_glu_serum', 'A1Cresult',
@@ -144,6 +132,40 @@ def build_dataframe(X, feature_names):
     return df, all_cat
 
 
+def greedy_ensemble(preds_list, y_true, n_rounds=50):
+    """AutoGluon-style greedy ensemble selection.
+
+    Each round: try adding each model's predictions to the current ensemble,
+    keep the one that improves AUROC the most. Weights are determined by
+    selection frequency.
+    """
+    n_models = len(preds_list)
+    selected = []
+    best_auroc = 0
+
+    for _ in range(n_rounds):
+        best_i = 0
+        best_round_auroc = 0
+        for i in range(n_models):
+            candidate = selected + [i]
+            # Average predictions of selected models
+            blend = np.mean([preds_list[j] for j in candidate], axis=0)
+            auroc = roc_auc_score(y_true, blend)
+            if auroc > best_round_auroc:
+                best_round_auroc = auroc
+                best_i = i
+        selected.append(best_i)
+        best_auroc = best_round_auroc
+
+    # Convert selection frequency to weights
+    weights = np.zeros(n_models)
+    for i in selected:
+        weights[i] += 1
+    weights /= weights.sum()
+
+    return weights, best_auroc
+
+
 if __name__ == "__main__":
     print(f"[train] Loading data...")
     X, y, feature_names, fold_indices = preprocess_data()
@@ -154,13 +176,13 @@ if __name__ == "__main__":
     del X
     gc.collect()
 
-    # Build numeric version for XGBoost
+    # Build numeric version for tree models
     df_numeric = df.copy()
     for col in cat_features:
         if col in df_numeric.columns:
             df_numeric[col] = pd.to_numeric(df_numeric[col], errors='coerce').fillna(0)
 
-    print(f"[train] Model: CatBoost + XGBoost ensemble (0.7/0.3 blend)")
+    print(f"[train] Model: AutoGluon-style ensemble (CB + XGB + GBM + ET)")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -174,96 +196,88 @@ if __name__ == "__main__":
     for fold_i, (train_idx, val_idx) in enumerate(fold_indices):
         from catboost import CatBoostClassifier, Pool
         from xgboost import XGBClassifier
+        from sklearn.ensemble import GradientBoostingClassifier, ExtraTreesClassifier
 
         df_train = df.iloc[train_idx]
         df_val = df.iloc[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
+        X_train_num = df_numeric.iloc[train_idx].values.astype(np.float64)
+        X_val_num = df_numeric.iloc[val_idx].values.astype(np.float64)
 
-        # CatBoost with native categoricals
+        preds = {}  # model_name -> val predictions
+
+        # --- Model 1: CatBoost (langevin, strongest) ---
         train_pool = Pool(df_train, label=y_train, cat_features=cat_features)
         val_pool = Pool(df_val, cat_features=cat_features)
 
         cb_model = CatBoostClassifier(
-            iterations=4000,
-            depth=6,
-            learning_rate=0.02,
-            rsm=0.8,
-            l2_leaf_reg=5,
-            min_data_in_leaf=20,
-            random_seed=MODEL_SEED,
-            verbose=0,
-            eval_metric='AUC',
-            task_type='CPU',
-            bagging_temperature=0.5,
-            random_strength=0.5,
-            langevin=True,
-            diffusion_temperature=10000,
+            iterations=4000, depth=6, learning_rate=0.02, rsm=0.8,
+            l2_leaf_reg=5, min_data_in_leaf=20, random_seed=MODEL_SEED,
+            verbose=0, eval_metric='AUC', task_type='CPU',
+            bagging_temperature=0.5, random_strength=0.5,
+            langevin=True, diffusion_temperature=10000,
         )
         cb_model.fit(train_pool)
-        cb_pred = cb_model.predict_proba(val_pool)[:, 1]
-
+        preds['CB1'] = cb_model.predict_proba(val_pool)[:, 1]
         del cb_model
         gc.collect()
 
-        # Second CatBoost with different config for diversity
-        cb_model2 = CatBoostClassifier(
-            iterations=3000,
-            depth=6,
-            learning_rate=0.03,
-            rsm=0.7,
-            l2_leaf_reg=3,
-            min_data_in_leaf=25,
-            random_seed=123,
-            verbose=0,
-            eval_metric='AUC',
-            task_type='CPU',
+        # --- Model 2: CatBoost (different config) ---
+        cb2 = CatBoostClassifier(
+            iterations=3000, depth=6, learning_rate=0.03, rsm=0.7,
+            l2_leaf_reg=3, min_data_in_leaf=25, random_seed=123,
+            verbose=0, eval_metric='AUC', task_type='CPU',
             bagging_temperature=0.3,
         )
-        cb_model2.fit(train_pool)
-        cb_pred2 = cb_model2.predict_proba(val_pool)[:, 1]
-
-        del cb_model2, train_pool, val_pool
+        cb2.fit(train_pool)
+        preds['CB2'] = cb2.predict_proba(val_pool)[:, 1]
+        del cb2, train_pool, val_pool
         gc.collect()
 
-        # XGBoost on numeric features
-        X_train_num = df_numeric.iloc[train_idx].values.astype(np.float64)
-        X_val_num = df_numeric.iloc[val_idx].values.astype(np.float64)
-
-        xgb_model = XGBClassifier(
-            n_estimators=3000,
-            max_depth=6,
-            learning_rate=0.01,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            reg_alpha=0.1,
-            reg_lambda=1.0,
-            min_child_weight=5,
-            random_state=MODEL_SEED,
-            eval_metric='auc',
-            verbosity=0,
+        # --- Model 3: XGBoost ---
+        xgb = XGBClassifier(
+            n_estimators=3000, max_depth=6, learning_rate=0.01,
+            subsample=0.8, colsample_bytree=0.8, reg_alpha=0.1,
+            reg_lambda=1.0, min_child_weight=5,
+            random_state=MODEL_SEED, eval_metric='auc', verbosity=0,
         )
-        xgb_model.fit(X_train_num, y_train)
-        xgb_pred = xgb_model.predict_proba(X_val_num)[:, 1]
-
-        del xgb_model
+        xgb.fit(X_train_num, y_train)
+        preds['XGB'] = xgb.predict_proba(X_val_num)[:, 1]
+        del xgb
         gc.collect()
 
-        # 3-model blend: CB1(langevin) 0.50 + CB2(no-langevin) 0.30 + XGB 0.20
-        y_pred_proba = 0.50 * cb_pred + 0.30 * cb_pred2 + 0.20 * xgb_pred
+        # --- Model 4: ExtraTrees (very different model type) ---
+        et = ExtraTreesClassifier(
+            n_estimators=1000, max_depth=12, min_samples_leaf=20,
+            max_features=0.7, random_state=MODEL_SEED, n_jobs=-1,
+        )
+        et.fit(X_train_num, y_train)
+        preds['ET'] = et.predict_proba(X_val_num)[:, 1]
+        del et
+        gc.collect()
+
+        # --- Greedy ensemble weight optimization ---
+        model_names = list(preds.keys())
+        preds_list = [preds[name] for name in model_names]
+
+        weights, greedy_auroc = greedy_ensemble(preds_list, y_val, n_rounds=50)
+
+        # Apply greedy weights
+        y_pred_proba = sum(w * p for w, p in zip(weights, preds_list))
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
         all_y_true.extend(y_val.tolist())
         all_y_proba.extend(y_pred_proba.tolist())
 
-        cb_auroc = roc_auc_score(y_val, cb_pred)
-        cb2_auroc = roc_auc_score(y_val, cb_pred2)
-        xgb_auroc = roc_auc_score(y_val, xgb_pred)
+        individual = ' '.join(f'{name}={roc_auc_score(y_val, preds[name]):.4f}' for name in model_names)
+        weight_str = ' '.join(f'{name}={w:.2f}' for name, w in zip(model_names, weights))
         print(f"  Fold {fold_i+1}/{len(fold_indices)}: "
               f"AUROC={fold_metrics['auroc']:.4f} "
-              f"(CB1={cb_auroc:.4f} CB2={cb2_auroc:.4f} XGB={xgb_auroc:.4f})")
+              f"({individual}) "
+              f"weights=[{weight_str}]")
 
-        del df_train, df_val
+        del df_train, df_val, preds
         gc.collect()
 
     result = {}
