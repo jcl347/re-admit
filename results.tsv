@@ -87,3 +87,4 @@ a50e53a	0.689722	0.063561	0.889197	163.1	4023.0	discard	exp92: CB2 depth=5 lange
 d62d8ab	0.689993	0.061226	0.889482	171.5	3845.0	keep	exp96: diag_pattern + discharge_group features - NEW BEST 0.6900! Broke 0.69 barrier!
 ddc3e81	0.689570	0.060534	0.889374	185.4	3858.1	discard	exp97: ICD-9 freq encoding + admission risk + med intensity - adds noise, worse
 cf7ae31	0.690179	0.061005	0.889374	177.1	4035.9	keep	exp98: diag1×admit_type + diag1×discharge_group categorical interactions - NEW BEST 0.6902!
+f2f0dcc	0.688900	0.000000	0.000000	177.1	0.0	discard	exp99: too many cat interactions (spec×diag1, diag2×admit) - OOM + worse fold 1
