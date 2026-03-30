@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 98: diag_group × admission_type categorical interaction + exp96 features.
-Clinical pattern: what condition + how admitted.
+Experiment 100: Remove numeric interaction features (CatBoost can learn them).
+Keep only the categorical interactions that actually help.
 """
 
 import gc
@@ -118,22 +118,8 @@ def build_dataframe(X, feature_names):
     del raw
     gc.collect()
 
-    # Interaction features (numeric)
-    df['inpatient_x_meds'] = df['number_inpatient'] * df['num_medications']
-    df['inpatient_x_time'] = df['number_inpatient'] * df['time_in_hospital']
-    df['meds_x_time'] = df['num_medications'] * df['time_in_hospital']
-    df['emergency_x_inpatient'] = df['number_emergency'] * df['number_inpatient']
+    # Keep only total visits (useful for XGBoost which can't split on categoricals)
     df['num_total_visits'] = df['number_outpatient'] + df['number_emergency'] + df['number_inpatient']
-
-    # Active medications count
-    med_cols = ['metformin', 'repaglinide', 'nateglinide', 'chlorpropamide',
-                'glimepiride', 'acetohexamide', 'glipizide', 'glyburide',
-                'tolbutamide', 'pioglitazone', 'rosiglitazone', 'acarbose',
-                'miglitol', 'troglitazone', 'tolazamide', 'insulin',
-                'glyburide-metformin', 'glipizide-metformin',
-                'glimepiride-pioglitazone', 'metformin-rosiglitazone',
-                'metformin-pioglitazone']
-    df['n_active_meds'] = sum((df[col] != 0).astype(int) for col in med_cols if col in df.columns)
 
     # Categorical columns for CatBoost
     cat_cols = ['race', 'gender', 'admission_type_id', 'discharge_disposition_id',
