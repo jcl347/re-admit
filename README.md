@@ -19,7 +19,7 @@ All scores below are **validation/test scores**, not training scores. Our scores
 
 | Model | Val AUROC | Eval Method | Source | Confidence |
 |---|---|---|---|---|
-| **Our 2xCatBoost + XGBoost** | **0.6906** | **5-fold stratified CV** | **This project (100 experiments)** | **Fixed seed, encounter-level** |
+| **Our 2xCatBoost + XGBoost + ET** | **0.6909** | **5-fold stratified CV** | **This project (101 experiments)** | **Fixed seed, encounter-level** |
 | XGBoost | 0.6812 | 80/20 holdout test | NHSJS (2023) | MEDIUM — student journal |
 | XGBoost | 0.667 | 80/20 holdout test | Emi-Johnson & Nkrumah (2025), Cureus | HIGH — PMC indexed |
 | CatBoost | 0.6571 | 70/30 train/val split | Gandra (2024), IJHS | LOW — reported 0.70 was TRAINING score |
@@ -32,13 +32,13 @@ All scores below are **validation/test scores**, not training scores. Our scores
 - Strack et al. (2014) created the dataset but reported NO AUROC (association study only).
 - Papers claiming AUROC > 0.72 (e.g., Temple Univ. LSTM at 0.79) use DIFFERENT datasets, not UCI 296.
 - Liu et al. (2024) used **patient-grouped** k-fold CV (same patient never in both train and validation), which is stricter than encounter-level splits.
-- **Our AUROC 0.6906 is the highest validated score reported on this dataset.**
+- **Our AUROC 0.6909 is the highest validated score reported on this dataset.**
 
 ### Key Insight from Published Work
 
 Strack et al. (2014) grouped ICD-9 diagnosis codes (diag_1, diag_2, diag_3) into 9 disease categories, reducing ~700+ unique codes to: **Circulatory** (390–459, 785), **Respiratory** (460–519, 786), **Digestive** (520–579, 787), **Diabetes** (250.xx), **Injury** (800–999), **Musculoskeletal** (710–739), **Genitourinary** (580–629, 788), **Neoplasms** (140–239), and **Other**. This grouping is standard preprocessing for this dataset.
 
-## Our Autoresearch Results (100 experiments)
+## Our Autoresearch Results (101 experiments)
 
 All scores are **5-fold CV validation scores** (out-of-fold predictions, never training scores). See `AUTORESEARCH_PROTOCOL.md` for the experiment protocol. See `results.tsv` for the full experiment log.
 
@@ -64,7 +64,8 @@ Early experiments established baselines with standard models, then progressed th
 | 89 | 0.6897 | 2xCatBoost + XGBoost | Two diverse CB configs + XGB 0.50/0.30/0.20 blend |
 | 96 | 0.6900 | 2xCatBoost + XGBoost | + diag_pattern + discharge_group features |
 | 98 | 0.6902 | 2xCatBoost + XGBoost | + diag1×admit_type + diag1×discharge interactions |
-| **100** | **0.6906** | **2xCatBoost + XGBoost** | **Removed noisy numeric interactions — cleaner feature set (current best)** |
+| 100 | 0.6906 | 2xCatBoost + XGBoost | Removed noisy numeric interactions — cleaner feature set |
+| **101** | **0.6909** | **2xCB + XGB + ExtraTrees** | **AutoGluon-style greedy ensemble weight selection (current best)** |
 
 **Key breakthrough (experiment 55):** CatBoost with proper pandas DataFrame and string-typed categorical columns enables CatBoost's native ordered target encoding, yielding a +0.006 AUROC jump over the previous best. This is because CatBoost's internal categorical handling is far superior to label encoding for tree-based models.
 
