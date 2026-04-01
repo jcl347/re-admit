@@ -1,9 +1,7 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 101: AutoGluon-inspired approach — diverse models + greedy weight optimization.
-4 diverse models: CatBoost(langevin), XGBoost, sklearn GBM, ExtraTrees.
-Greedy ensemble selection finds optimal weights on a held-out slice.
+Experiment 107: Add payer_code from raw CSV (40% missing, dropped by prepare.py).
 """
 
 import gc
@@ -63,7 +61,7 @@ def build_dataframe(X, feature_names):
     raw_path = Path.home() / '.cache/re-admit/diabetic_data.csv'
     raw = pd.read_csv(raw_path, usecols=[
         'diag_1', 'diag_2', 'diag_3', 'discharge_disposition_id',
-        'medical_specialty'
+        'medical_specialty', 'payer_code'
     ])
 
     df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
@@ -105,6 +103,12 @@ def build_dataframe(X, feature_names):
     df['diag1_x_admit'] = df['diag_group_1'] + '_' + df['admission_type_id'].astype(int).astype(str)
     df['diag1_x_discharge'] = df['diag_group_1'] + '_' + df['discharge_group']
 
+    # Payer code (insurance type, 40% missing)
+    from sklearn.preprocessing import LabelEncoder as LE2
+    le2 = LE2()
+    df['payer_code'] = le2.fit_transform(raw['payer_code'].fillna('?').astype(str))
+    df['payer_code'] = df['payer_code'].astype(int).astype(str)
+
     del raw
     gc.collect()
 
@@ -126,7 +130,8 @@ def build_dataframe(X, feature_names):
 
     added_cat = ['diag_group_1', 'diag_group_2', 'diag_group_3',
                  'is_dead', 'is_diab_primary', 'n_diab_diag', 'medical_specialty',
-                 'diag_pattern', 'discharge_group', 'diag1_x_admit', 'diag1_x_discharge']
+                 'diag_pattern', 'discharge_group', 'diag1_x_admit', 'diag1_x_discharge',
+                 'payer_code']
     all_cat = [c for c in cat_cols if c in df.columns] + added_cat
 
     return df, all_cat
