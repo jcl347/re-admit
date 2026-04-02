@@ -1,7 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 107: Add payer_code from raw CSV (40% missing, dropped by prepare.py).
+Experiment 109: Drop ExtraTrees (0 weight often), add weight_recorded + payer×diag1.
+3 models: CB1(langevin), CB2, XGBoost. Saves memory for richer features.
 """
 
 import gc
@@ -61,7 +62,7 @@ def build_dataframe(X, feature_names):
     raw_path = Path.home() / '.cache/re-admit/diabetic_data.csv'
     raw = pd.read_csv(raw_path, usecols=[
         'diag_1', 'diag_2', 'diag_3', 'discharge_disposition_id',
-        'medical_specialty', 'payer_code'
+        'medical_specialty', 'payer_code', 'weight'
     ])
 
     df['diag_group_1'] = raw['diag_1'].apply(icd9_to_group).astype(int).astype(str)
@@ -109,6 +110,12 @@ def build_dataframe(X, feature_names):
     df['payer_code'] = le2.fit_transform(raw['payer_code'].fillna('?').astype(str))
     df['payer_code'] = df['payer_code'].astype(int).astype(str)
 
+    # Weight recorded flag (97% missing — missingness is informative)
+    df['weight_recorded'] = (raw['weight'] != '?').astype(int).astype(str)
+
+    # Payer × primary diagnosis group interaction
+    df['payer_x_diag1'] = df['payer_code'] + '_' + df['diag_group_1']
+
     del raw
     gc.collect()
 
@@ -131,7 +138,7 @@ def build_dataframe(X, feature_names):
     added_cat = ['diag_group_1', 'diag_group_2', 'diag_group_3',
                  'is_dead', 'is_diab_primary', 'n_diab_diag', 'medical_specialty',
                  'diag_pattern', 'discharge_group', 'diag1_x_admit', 'diag1_x_discharge',
-                 'payer_code']
+                 'payer_code', 'weight_recorded', 'payer_x_diag1']
     all_cat = [c for c in cat_cols if c in df.columns] + added_cat
 
     return df, all_cat
@@ -187,7 +194,7 @@ if __name__ == "__main__":
         if col in df_numeric.columns:
             df_numeric[col] = pd.to_numeric(df_numeric[col], errors='coerce').fillna(0)
 
-    print(f"[train] Model: AutoGluon-style ensemble (CB + XGB + GBM + ET)")
+    print(f"[train] Model: AutoGluon-style ensemble (2xCB + XGB)")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -201,7 +208,7 @@ if __name__ == "__main__":
     for fold_i, (train_idx, val_idx) in enumerate(fold_indices):
         from catboost import CatBoostClassifier, Pool
         from xgboost import XGBClassifier
-        from sklearn.ensemble import GradientBoostingClassifier, ExtraTreesClassifier
+        from sklearn.ensemble import GradientBoostingClassifier
 
         df_train = df.iloc[train_idx]
         df_val = df.iloc[val_idx]
@@ -249,16 +256,6 @@ if __name__ == "__main__":
         xgb.fit(X_train_num, y_train)
         preds['XGB'] = xgb.predict_proba(X_val_num)[:, 1]
         del xgb
-        gc.collect()
-
-        # --- Model 4: ExtraTrees (very different model type) ---
-        et = ExtraTreesClassifier(
-            n_estimators=1000, max_depth=12, min_samples_leaf=20,
-            max_features=0.7, random_state=MODEL_SEED, n_jobs=-1,
-        )
-        et.fit(X_train_num, y_train)
-        preds['ET'] = et.predict_proba(X_val_num)[:, 1]
-        del et
         gc.collect()
 
         # --- Greedy ensemble weight optimization ---
