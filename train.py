@@ -1,8 +1,8 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 109: Drop ExtraTrees (0 weight often), add weight_recorded + payer×diag1.
-3 models: CB1(langevin), CB2, XGBoost. Saves memory for richer features.
+Experiment 113: Add 3rd CatBoost (depth=8 deep) + reduce XGB to 2000 iters to save memory.
+4 diverse models: CB1(langevin d6), CB2(d6), CB3(d8 deep), XGB(2000).
 """
 
 import gc
@@ -243,12 +243,24 @@ if __name__ == "__main__":
         )
         cb2.fit(train_pool)
         preds['CB2'] = cb2.predict_proba(val_pool)[:, 1]
-        del cb2, train_pool, val_pool
+        del cb2
         gc.collect()
 
-        # --- Model 3: XGBoost ---
+        # --- Model 3: CatBoost (deep trees, different structure) ---
+        cb3 = CatBoostClassifier(
+            iterations=2000, depth=8, learning_rate=0.03, rsm=0.6,
+            l2_leaf_reg=10, min_data_in_leaf=50, random_seed=777,
+            verbose=0, eval_metric='AUC', task_type='CPU',
+            bagging_temperature=0.5,
+        )
+        cb3.fit(train_pool)
+        preds['CB3'] = cb3.predict_proba(val_pool)[:, 1]
+        del cb3, train_pool, val_pool
+        gc.collect()
+
+        # --- Model 4: XGBoost ---
         xgb = XGBClassifier(
-            n_estimators=3000, max_depth=6, learning_rate=0.01,
+            n_estimators=2000, max_depth=6, learning_rate=0.01,
             subsample=0.8, colsample_bytree=0.8, reg_alpha=0.1,
             reg_lambda=1.0, min_child_weight=5,
             random_state=MODEL_SEED, eval_metric='auc', verbosity=0,
