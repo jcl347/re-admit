@@ -1,8 +1,7 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 118: Single powerful CatBoost — CB1 only with 6000 iters, lr=0.01.
-Drop all other models to save memory for more iterations on the best model.
+Experiment 114: Increase greedy ensemble rounds to 100 for better weight optimization.
 """
 
 import gc
@@ -188,7 +187,13 @@ if __name__ == "__main__":
     del X
     gc.collect()
 
-    print(f"[train] Model: Single CatBoost (6000 iters, lr=0.01)")
+    # Build numeric version for tree models
+    df_numeric = df.copy()
+    for col in cat_features:
+        if col in df_numeric.columns:
+            df_numeric[col] = pd.to_numeric(df_numeric[col], errors='coerce').fillna(0)
+
+    print(f"[train] Model: AutoGluon-style ensemble (2xCB + XGB)")
     print(f"[train] Features: {df.shape[1]} ({len(cat_features)} categorical)")
     print(f"[train] Samples: {df.shape[0]}")
 
@@ -201,10 +206,14 @@ if __name__ == "__main__":
 
     for fold_i, (train_idx, val_idx) in enumerate(fold_indices):
         from catboost import CatBoostClassifier, Pool
+        from xgboost import XGBClassifier
+        from sklearn.ensemble import GradientBoostingClassifier
 
         df_train = df.iloc[train_idx]
         df_val = df.iloc[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
+        X_train_num = df_numeric.iloc[train_idx].values.astype(np.float64)
+        X_val_num = df_numeric.iloc[val_idx].values.astype(np.float64)
 
         preds = {}  # model_name -> val predictions
 
@@ -213,27 +222,75 @@ if __name__ == "__main__":
         val_pool = Pool(df_val, cat_features=cat_features)
 
         cb_model = CatBoostClassifier(
-            iterations=6000, depth=6, learning_rate=0.01, rsm=0.8,
+            iterations=4000, depth=6, learning_rate=0.02, rsm=0.8,
             l2_leaf_reg=5, min_data_in_leaf=20, random_seed=MODEL_SEED,
             verbose=0, eval_metric='AUC', task_type='CPU',
             bagging_temperature=0.5, random_strength=0.5,
             langevin=True, diffusion_temperature=10000,
         )
         cb_model.fit(train_pool)
-        y_pred_proba = cb_model.predict_proba(val_pool)[:, 1]
-        del cb_model, train_pool, val_pool
+        preds['CB1'] = cb_model.predict_proba(val_pool)[:, 1]
+        del cb_model
         gc.collect()
+
+        # --- Model 2: CatBoost (different config) ---
+        cb2 = CatBoostClassifier(
+            iterations=3000, depth=6, learning_rate=0.03, rsm=0.7,
+            l2_leaf_reg=3, min_data_in_leaf=25, random_seed=123,
+            verbose=0, eval_metric='AUC', task_type='CPU',
+            bagging_temperature=0.3,
+        )
+        cb2.fit(train_pool)
+        preds['CB2'] = cb2.predict_proba(val_pool)[:, 1]
+        del cb2
+        gc.collect()
+
+        # --- Model 3: CatBoost (deep trees, different structure) ---
+        cb3 = CatBoostClassifier(
+            iterations=2000, depth=8, learning_rate=0.03, rsm=0.6,
+            l2_leaf_reg=10, min_data_in_leaf=50, random_seed=777,
+            verbose=0, eval_metric='AUC', task_type='CPU',
+            bagging_temperature=0.5,
+        )
+        cb3.fit(train_pool)
+        preds['CB3'] = cb3.predict_proba(val_pool)[:, 1]
+        del cb3, train_pool, val_pool
+        gc.collect()
+
+        # --- Model 4: XGBoost ---
+        xgb = XGBClassifier(
+            n_estimators=2000, max_depth=6, learning_rate=0.01,
+            subsample=0.8, colsample_bytree=0.8, reg_alpha=0.1,
+            reg_lambda=1.0, min_child_weight=5,
+            random_state=MODEL_SEED, eval_metric='auc', verbosity=0,
+        )
+        xgb.fit(X_train_num, y_train)
+        preds['XGB'] = xgb.predict_proba(X_val_num)[:, 1]
+        del xgb
+        gc.collect()
+
+        # --- Greedy ensemble weight optimization ---
+        model_names = list(preds.keys())
+        preds_list = [preds[name] for name in model_names]
+
+        weights, greedy_auroc = greedy_ensemble(preds_list, y_val, n_rounds=100)
+
+        # Apply greedy weights
+        y_pred_proba = sum(w * p for w, p in zip(weights, preds_list))
 
         fold_metrics = evaluate(y_val, y_pred_proba)
         all_metrics.append(fold_metrics)
         all_y_true.extend(y_val.tolist())
         all_y_proba.extend(y_pred_proba.tolist())
 
+        individual = ' '.join(f'{name}={roc_auc_score(y_val, preds[name]):.4f}' for name in model_names)
+        weight_str = ' '.join(f'{name}={w:.2f}' for name, w in zip(model_names, weights))
         print(f"  Fold {fold_i+1}/{len(fold_indices)}: "
-              f"AUROC={fold_metrics['auroc']:.4f}"
-        )
+              f"AUROC={fold_metrics['auroc']:.4f} "
+              f"({individual}) "
+              f"weights=[{weight_str}]")
 
-        del df_train, df_val
+        del df_train, df_val, preds
         gc.collect()
 
     result = {}
