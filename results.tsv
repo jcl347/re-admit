@@ -92,3 +92,4 @@ e5b42f1	0.690623	0.058309	0.889266	163.1	4721.8	keep	exp100: removed numeric int
 3e30b28	0.690916	0.050821	0.889364	169.5	4549.7	keep	exp101: AutoGluon-style greedy ensemble CB1+CB2+XGB+ET - NEW BEST 0.6909!
 c329d48	0.689600	0.000000	0.000000	169.5	0.0	discard	exp102: 5-model + GBM - GBM gets weight 0 (too correlated). Killed (too slow)
 1dd95c3	0.693097	0.057817	0.889688	177.9	8221.0	keep	exp113: CB3(depth=8) + reduced XGB 2000 - NEW BEST 0.6931! CB3 adds diversity
+7fd91ac	0.693140	0.057879	0.889688	177.9	8250.0	keep	exp114: greedy 100 rounds (was 50) - marginal NEW BEST 0.6931 (+0.00004)
