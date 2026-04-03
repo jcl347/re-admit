@@ -1,8 +1,7 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 113: Add 3rd CatBoost (depth=8 deep) + reduce XGB to 2000 iters to save memory.
-4 diverse models: CB1(langevin d6), CB2(d6), CB3(d8 deep), XGB(2000).
+Experiment 114: Increase greedy ensemble rounds to 100 for better weight optimization.
 """
 
 import gc
@@ -274,7 +273,7 @@ if __name__ == "__main__":
         model_names = list(preds.keys())
         preds_list = [preds[name] for name in model_names]
 
-        weights, greedy_auroc = greedy_ensemble(preds_list, y_val, n_rounds=50)
+        weights, greedy_auroc = greedy_ensemble(preds_list, y_val, n_rounds=100)
 
         # Apply greedy weights
         y_pred_proba = sum(w * p for w, p in zip(weights, preds_list))
