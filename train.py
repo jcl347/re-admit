@@ -1,7 +1,7 @@
 """
 train.py — The ONLY file you modify during autoresearch experiments.
 
-Experiment 114: Increase greedy ensemble rounds to 100 for better weight optimization.
+Experiment 119: CB1 4500 iters (up from 4000), CB2 2000 (down from 3000) to save memory.
 """
 
 import gc
@@ -222,7 +222,7 @@ if __name__ == "__main__":
         val_pool = Pool(df_val, cat_features=cat_features)
 
         cb_model = CatBoostClassifier(
-            iterations=4000, depth=6, learning_rate=0.02, rsm=0.8,
+            iterations=4500, depth=6, learning_rate=0.02, rsm=0.8,
             l2_leaf_reg=5, min_data_in_leaf=20, random_seed=MODEL_SEED,
             verbose=0, eval_metric='AUC', task_type='CPU',
             bagging_temperature=0.5, random_strength=0.5,
@@ -235,7 +235,7 @@ if __name__ == "__main__":
 
         # --- Model 2: CatBoost (different config) ---
         cb2 = CatBoostClassifier(
-            iterations=3000, depth=6, learning_rate=0.03, rsm=0.7,
+            iterations=2000, depth=6, learning_rate=0.03, rsm=0.7,
             l2_leaf_reg=3, min_data_in_leaf=25, random_seed=123,
             verbose=0, eval_metric='AUC', task_type='CPU',
             bagging_temperature=0.3,
